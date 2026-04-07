@@ -1,0 +1,6 @@
+[package]
+name = "cdp-audit"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]

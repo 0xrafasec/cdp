@@ -1,0 +1,63 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/cdp-gate",
+    "crates/cdp-policy",
+    "crates/cdp-lease",
+    "crates/cdp-crypto",
+    "crates/cdp-proxy",
+    "crates/cdp-browser",
+    "crates/cdp-cli-wrap",
+    "crates/cdp-vault",
+    "crates/cdp-token",
+    "crates/cdp-audit",
+    "crates/cdp-sdk",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/user/cdp"
+
+[workspace.dependencies]
+# Crypto
+chacha20poly1305 = "0.10"
+hkdf = "0.12"
+sha2 = "0.10"
+hmac = "0.12"
+argon2 = "0.5"
+zeroize = { version = "1", features = ["derive"] }
+rand = "0.9"
+
+# System
+nix = { version = "0.29", features = ["process", "resource", "socket", "mman"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+
+# Async
+tokio = { version = "1", features = ["full"] }
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Error handling
+thiserror = "2"
+anyhow = "1"
+
+# Internal crates
+cdp-crypto = { path = "crates/cdp-crypto" }
+cdp-policy = { path = "crates/cdp-policy" }
+cdp-lease = { path = "crates/cdp-lease" }
+cdp-audit = { path = "crates/cdp-audit" }
+cdp-token = { path = "crates/cdp-token" }
+cdp-proxy = { path = "crates/cdp-proxy" }
+cdp-vault = { path = "crates/cdp-vault" }
+cdp-browser = { path = "crates/cdp-browser" }
+cdp-sdk = { path = "crates/cdp-sdk" }
+cdp-gate = { path = "crates/cdp-gate" }
+cdp-cli-wrap = { path = "crates/cdp-cli-wrap" }

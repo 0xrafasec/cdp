@@ -1,0 +1,6 @@
+[package]
+name = "cdp-browser"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]

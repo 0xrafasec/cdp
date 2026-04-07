@@ -1,0 +1,6 @@
+[package]
+name = "cdp-cli-wrap"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]

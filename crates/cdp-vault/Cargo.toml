@@ -1,0 +1,6 @@
+[package]
+name = "cdp-vault"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]

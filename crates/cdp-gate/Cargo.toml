@@ -1,0 +1,6 @@
+[package]
+name = "cdp-gate"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]

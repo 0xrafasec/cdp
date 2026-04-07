@@ -1,0 +1,6 @@
+[package]
+name = "cdp-lease"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]

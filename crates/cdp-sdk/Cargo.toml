@@ -1,0 +1,6 @@
+[package]
+name = "cdp-sdk"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
