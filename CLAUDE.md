@@ -46,6 +46,17 @@ cdp/crates/
 
 See `ROADMAP.md` for the 11-phase implementation plan. Each phase has full context so an AI agent can implement it without re-reading the entire spec. Phases are dependency-ordered — the dependency graph is at the bottom of the file. Key parallelism: Phases 3+4 can run concurrently, and Phases 7+8+9 can run concurrently. When you finish implementing each phase, update the roadmap with check, marking as complete.
 
+## Code Quality Standards
+
+This is a security protocol implementation — not a prototype. All code must be production-grade.
+
+- **No stubs, placeholder code, or temporary implementations.** Every function must be fully implemented with real logic. If a dependency isn't available yet, wait for it or define proper trait interfaces — never use `todo!()`, `unimplemented!()`, or dummy return values.
+- **No mocking real behavior.** If something needs a real cryptographic operation, use one. If it needs real OS calls, make them. Test doubles are acceptable only in test code, never in library/binary code.
+- **Security best practices are mandatory.** Follow the threat model (`spec/THREAT_MODEL.md`). Use constant-time comparisons for secrets. Zeroize sensitive memory on drop. Validate all inputs at system boundaries. Never log credentials or secrets.
+- **Rust best practices.** Prefer strong typing over stringly-typed code. Use newtypes for domain concepts (LeaseId, fingerprint hashes). Leverage the type system to make invalid states unrepresentable. Handle errors explicitly — no `.unwrap()` in library code.
+- **Every public function must have tests.** Unit tests in `#[cfg(test)]` modules, integration tests in `tests/`. Async code uses `#[tokio::test]`.
+- **Follow existing patterns.** Match the style established in `cdp-crypto`: module-per-concern, `thiserror` for error enums, length-prefixed hashing to prevent field-boundary ambiguity, `SecureBuffer`/`Zeroizing<T>` for sensitive data.
+
 ## When Editing Specs
 
 - Keep all four documents consistent — a change in PROTOCOL.md likely requires updates to the whitepaper, architecture, and threat model.
