@@ -11,7 +11,7 @@ use crate::error::GateError;
 /// Gate configuration parsed from `~/.config/cdp/gate.toml`.
 ///
 /// Every field has a sensible default so the Gate can start with no config file.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default)]
 pub struct GateConfig {
     pub gate: GateSection,
@@ -158,19 +158,6 @@ fn default_socket_path() -> String {
     }
 }
 
-impl Default for GateConfig {
-    fn default() -> Self {
-        Self {
-            gate: GateSection::default(),
-            vault: VaultSection::default(),
-            approval: ApprovalSection::default(),
-            security: SecuritySection::default(),
-            proxy: ProxySection::default(),
-            browser: BrowserSection::default(),
-        }
-    }
-}
-
 impl Default for GateSection {
     fn default() -> Self {
         Self {
@@ -301,10 +288,10 @@ pub fn expand_tilde(path: &str) -> PathBuf {
         if let Ok(home) = std::env::var("HOME") {
             return PathBuf::from(home).join(rest);
         }
-    } else if path == "~" {
-        if let Ok(home) = std::env::var("HOME") {
-            return PathBuf::from(home);
-        }
+    } else if path == "~"
+        && let Ok(home) = std::env::var("HOME")
+    {
+        return PathBuf::from(home);
     }
     PathBuf::from(path)
 }

@@ -29,7 +29,7 @@
 
 ---
 
-## Phase 2: Transport, Agent Verification & Registration
+## Phase 2: Transport, Agent Verification & Registration ✅
 
 **Goal:** The Gate daemon listens on a Unix socket, accepts agent connections, cryptographically fingerprints them, and issues session tokens. Agents can register and the Gate can detect when they die.
 
