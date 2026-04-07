@@ -84,7 +84,7 @@
 
 ---
 
-## Phase 3: Policy Engine
+## Phase 3: Policy Engine ✅
 
 **Goal:** The Gate can load, validate, and evaluate TOML policy files. Auto-approve requires `agent_binary_hash`. Policy directory is watched for changes.
 
