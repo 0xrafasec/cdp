@@ -4,3 +4,24 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+cdp-crypto = { workspace = true }
+tokio = { workspace = true }
+nix = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+sha2 = { workspace = true }
+rand = { workspace = true }
+ed25519-dalek = { workspace = true }
+base64 = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+lru = { workspace = true }
+libc = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"

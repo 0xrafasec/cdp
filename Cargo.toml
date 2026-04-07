@@ -49,6 +49,16 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 thiserror = "2"
 anyhow = "1"
 
+# Identity / signing
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+base64 = "0.22"
+
+# JSON-RPC support
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+lru = "0.12"
+libc = "0.2"
+
 # Internal crates
 cdp-crypto = { path = "crates/cdp-crypto" }
 cdp-policy = { path = "crates/cdp-policy" }
