@@ -10,7 +10,6 @@
 //! - `single_use = true` — all tokens issued over this channel are single-use.
 //! - `delegation_allowed = false` — remote agents may not sub-delegate.
 
-use std::fs;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -204,44 +203,24 @@ impl TlsListener {
 
 /// Load PEM-encoded certificate chain from a file.
 fn load_certs(path: &Path) -> Result<Vec<rustls::pki_types::CertificateDer<'static>>, GateError> {
-    let cert_pem = fs::read(path).map_err(|e| {
-        GateError::Listener(format!("failed to read cert file {}: {e}", path.display()))
-    })?;
-    let mut reader = std::io::BufReader::new(cert_pem.as_slice());
-    let certs: Result<Vec<_>, _> = rustls_pemfile::certs(&mut reader).collect();
+    use rustls::pki_types::pem::PemObject;
+    let certs: Result<Vec<_>, _> = rustls::pki_types::CertificateDer::pem_file_iter(path)
+        .map_err(|e| {
+            GateError::Listener(format!("failed to read cert file {}: {e}", path.display()))
+        })?
+        .collect();
     certs.map_err(|e| GateError::Listener(format!("PEM cert parse error: {e}")))
 }
 
 /// Load PEM-encoded private key from a file.
 fn load_private_key(path: &Path) -> Result<rustls::pki_types::PrivateKeyDer<'static>, GateError> {
-    let key_pem = fs::read(path).map_err(|e| {
-        GateError::Listener(format!("failed to read key file {}: {e}", path.display()))
-    })?;
-    let mut reader = std::io::BufReader::new(key_pem.as_slice());
-
-    // Try PKCS#8 first, then PKCS#1.
-    let mut pkcs8_keys: Vec<_> = rustls_pemfile::pkcs8_private_keys(&mut reader)
-        .collect::<Result<_, _>>()
-        .map_err(|e| GateError::Listener(format!("PEM key parse error: {e}")))?;
-
-    if let Some(key) = pkcs8_keys.pop() {
-        return Ok(rustls::pki_types::PrivateKeyDer::Pkcs8(key));
-    }
-
-    // Re-read since the cursor was consumed.
-    let mut reader = std::io::BufReader::new(key_pem.as_slice());
-    let mut rsa_keys: Vec<_> = rustls_pemfile::rsa_private_keys(&mut reader)
-        .collect::<Result<_, _>>()
-        .map_err(|e| GateError::Listener(format!("PEM RSA key parse error: {e}")))?;
-
-    if let Some(key) = rsa_keys.pop() {
-        return Ok(rustls::pki_types::PrivateKeyDer::Pkcs1(key));
-    }
-
-    Err(GateError::Listener(format!(
-        "no private key found in {}",
-        path.display()
-    )))
+    use rustls::pki_types::pem::PemObject;
+    rustls::pki_types::PrivateKeyDer::from_pem_file(path).map_err(|e| {
+        GateError::Listener(format!(
+            "failed to load private key from {}: {e}",
+            path.display()
+        ))
+    })
 }
 
 // ---------------------------------------------------------------------------
