@@ -13,6 +13,9 @@ use tokio::sync::{mpsc, Mutex, RwLock};
 use uuid::Uuid;
 use zeroize::Zeroizing;
 
+use cdp_lease::LeaseManager;
+use cdp_policy::{AgentInfo, PolicyDecision, PolicyEngine, Scope};
+
 use crate::config::GateConfig;
 use crate::error::*;
 use crate::types::*;
@@ -23,11 +26,23 @@ pub struct Router {
     registry: Arc<RwLock<HashMap<String, AgentRegistration>>>,
     nonce_cache: Arc<Mutex<LruCache<String, ()>>>,
     death_tx: mpsc::Sender<DeathNotification>,
+    /// Lease lifecycle manager shared with the proxy subsystem.
+    lease_manager: Arc<LeaseManager>,
+    /// Per-lease proxy listener pool.
+    proxy_manager: Arc<cdp_proxy::ProxyManager>,
+    /// Policy engine for evaluating credential requests.
+    policy_engine: Arc<PolicyEngine>,
 }
 
 impl Router {
     /// Create a new `Router` with a freshly generated gate key.
-    pub fn new(config: Arc<GateConfig>, death_tx: mpsc::Sender<DeathNotification>) -> Self {
+    pub fn new(
+        config: Arc<GateConfig>,
+        death_tx: mpsc::Sender<DeathNotification>,
+        lease_manager: Arc<LeaseManager>,
+        proxy_manager: Arc<cdp_proxy::ProxyManager>,
+        policy_engine: Arc<PolicyEngine>,
+    ) -> Self {
         // Generate random 32-byte gate key.
         let mut key_bytes = [0u8; 32];
         rand::rng().fill_bytes(&mut key_bytes);
@@ -43,6 +58,9 @@ impl Router {
             registry: Arc::new(RwLock::new(HashMap::new())),
             nonce_cache,
             death_tx,
+            lease_manager,
+            proxy_manager,
+            policy_engine,
         }
     }
 
@@ -87,6 +105,31 @@ impl Router {
                         }
                     };
                 match self.handle_register(params, peer, connection_id).await {
+                    Ok(value) => JsonRpcResponse::success(id, value),
+                    Err(e) => gate_error_to_response(id, e),
+                }
+            }
+            "cdp.requestCredential" => {
+                // Parse params first (before session validation so we can return
+                // a structured error for malformed params).
+                let params: RequestCredentialParams =
+                    match serde_json::from_value(request.params.clone()) {
+                        Ok(p) => p,
+                        Err(e) => {
+                            return JsonRpcResponse::error(
+                                id,
+                                INVALID_REQUEST,
+                                format!("invalid params: {e}"),
+                            );
+                        }
+                    };
+                // Validate session using the session_token from params.
+                if let Err(e) =
+                    self.validate_session(&request.params, peer, connection_id).await
+                {
+                    return gate_error_to_response(id, e);
+                }
+                match self.handle_request_credential(params, peer, connection_id).await {
                     Ok(value) => JsonRpcResponse::success(id, value),
                     Err(e) => gate_error_to_response(id, e),
                 }
@@ -218,6 +261,149 @@ impl Router {
         Ok(serde_json::to_value(result).expect("RegisterResult is always serializable"))
     }
 
+    /// Handle a `cdp.requestCredential` request.
+    ///
+    /// Pipeline:
+    /// 1. Replay protection (nonce + timestamp).
+    /// 2. Look up agent registration by peer identity.
+    /// 3. Build [`AgentInfo`] for the policy engine.
+    /// 4. Evaluate policy (with optional user approval).
+    /// 5. Create lease via [`LeaseManager`].
+    /// 6. Start per-lease proxy via [`ProxyManager`].
+    /// 7. Return lease token, channel-binding nonce, port, and granted scope.
+    async fn handle_request_credential(
+        &self,
+        params: RequestCredentialParams,
+        peer: &PeerInfo,
+        connection_id: &[u8],
+    ) -> Result<serde_json::Value, GateError> {
+        // 1. Replay protection.
+        self.validate_replay(&params.nonce, &params.timestamp).await?;
+
+        // 2. Look up the registration for this peer.
+        let registration = {
+            let registry = self.registry.read().await;
+            registry
+                .values()
+                .find(|r| r.fingerprint.pid == peer.pid && r.connection_id == connection_id)
+                .map(|r| {
+                    // Clone the fields we need (AgentFingerprint is not Clone).
+                    (
+                        r.fingerprint.uid,
+                        r.fingerprint.pid,
+                        r.fingerprint.binary_path.clone(),
+                        r.fingerprint.binary_hash,
+                        r.fingerprint.start_time,
+                        r.fingerprint.fingerprint_hash,
+                        r.agent_id.clone(),
+                        r.agent_version.clone(),
+                    )
+                })
+        };
+
+        let (uid, pid, binary_path, binary_hash, start_time, fingerprint_hash, agent_id, agent_version) =
+            registration.ok_or_else(|| {
+                GateError::SessionInvalid("no registration found for this peer".to_string())
+            })?;
+
+        // 3. Build AgentInfo.
+        let agent_info = AgentInfo {
+            uid,
+            pid,
+            binary_path,
+            binary_hash,
+            start_time,
+            fingerprint_hash,
+            agent_id: Some(agent_id),
+            agent_version: Some(agent_version),
+        };
+
+        // 4. Convert requested scope from RPC params.
+        let requested_scope = Scope {
+            hosts: params.scope.hosts,
+            methods: params.scope.methods,
+            paths: params.scope.paths,
+            ttl_seconds: params.scope.ttl_seconds,
+            max_requests: params.scope.max_requests,
+            ..Scope::default()
+        };
+
+        // 5. Policy evaluation (may prompt the user).
+        let decision = self
+            .policy_engine
+            .evaluate_with_approval(
+                &agent_info,
+                &params.credential_ref,
+                &requested_scope,
+                &params.reason,
+            )
+            .await?;
+
+        let (granted_scope, policy_name, constraints) = match decision {
+            PolicyDecision::AutoApprove {
+                granted_scope,
+                policy_name,
+                constraints,
+            } => (granted_scope, policy_name, constraints),
+            PolicyDecision::Denied { reason } => {
+                return Err(GateError::CredentialDenied(reason));
+            }
+            PolicyDecision::RequiresApproval { .. } => {
+                // evaluate_with_approval resolves this branch; reaching here
+                // indicates an approval timeout or command error (which returns
+                // an Err above via `?`).  Handle defensively:
+                return Err(GateError::CredentialDenied(
+                    "approval required but not resolved".to_string(),
+                ));
+            }
+        };
+
+        // 6. Create the lease.
+        let lease = self
+            .lease_manager
+            .create_lease(
+                &agent_info,
+                &params.credential_ref,
+                granted_scope.clone(),
+                &constraints,
+                &policy_name,
+                "auto",
+            )
+            .await?;
+
+        // 7. Start the proxy listener.
+        let proxy_port = self.proxy_manager.start_proxy(&lease.lease_id).await?;
+
+        // 8. Encode the channel-binding nonce for the agent.
+        let cb_nonce_hex = hex_encode(&lease.channel_binding_nonce);
+
+        tracing::info!(
+            agent_pid = pid,
+            credential_ref = %params.credential_ref,
+            lease_id = %lease.lease_id,
+            proxy_port,
+            "credential lease granted"
+        );
+
+        let result = RequestCredentialResult {
+            status: "granted".to_string(),
+            lease_id: lease.lease_id.to_string(),
+            proxy_port,
+            lease_token: lease.lease_token.clone(),
+            channel_binding_nonce: cb_nonce_hex,
+            ttl_seconds: lease.ttl_seconds,
+            granted_scope: GrantedScopeInfo {
+                hosts: granted_scope.hosts,
+                methods: granted_scope.methods,
+                paths: granted_scope.paths,
+                ttl_seconds: granted_scope.ttl_seconds,
+                max_requests: granted_scope.max_requests,
+            },
+        };
+
+        Ok(serde_json::to_value(result).expect("RequestCredentialResult is always serializable"))
+    }
+
     /// Validate a session token from request params.
     async fn validate_session(
         &self,
@@ -258,16 +444,44 @@ impl Router {
         Ok(())
     }
 
-    /// Handle a death notification by removing the agent from the registry.
+    /// Handle a death notification by removing the agent from the registry
+    /// and revoking all their active leases + stopping proxy listeners.
     pub async fn handle_death(&self, notification: DeathNotification) {
         let key = hex_encode(&notification.fingerprint_hash);
-        let mut registry = self.registry.write().await;
-        if registry.remove(&key).is_some() {
+
+        // Remove from registry.
+        let removed = {
+            let mut registry = self.registry.write().await;
+            registry.remove(&key).is_some()
+        };
+
+        if removed {
             tracing::info!(
                 pid = notification.pid,
                 fingerprint = %key,
                 "agent deregistered (process exited)"
             );
+
+            // Revoke all leases for this agent.
+            match self
+                .lease_manager
+                .revoke_agent_leases(&notification.fingerprint_hash, "agent process exited")
+                .await
+            {
+                Ok(revoked_ids) => {
+                    // Stop the proxy listener for each revoked lease.
+                    for lease_id in revoked_ids {
+                        self.proxy_manager.release_lease(&lease_id).await;
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        fingerprint = %key,
+                        error = %e,
+                        "failed to revoke agent leases on death"
+                    );
+                }
+            }
         }
     }
 
@@ -337,6 +551,15 @@ fn gate_error_to_response(id: serde_json::Value, err: GateError) -> JsonRpcRespo
         GateError::AgentVerification(_) => {
             JsonRpcResponse::error(id, AGENT_VERIFICATION_FAILED, err.to_string())
         }
+        GateError::CredentialDenied(_) => {
+            JsonRpcResponse::error(id, CREDENTIAL_DENIED, err.to_string())
+        }
+        GateError::Lease(_) => {
+            JsonRpcResponse::error(id, LEASE_ERROR, err.to_string())
+        }
+        GateError::Proxy(_) => {
+            JsonRpcResponse::error(id, PROXY_ERROR, err.to_string())
+        }
         GateError::JsonRpc { code, message } => {
             JsonRpcResponse::error(id, *code, message.clone())
         }
@@ -351,12 +574,42 @@ fn gate_error_to_response(id: serde_json::Value, err: GateError) -> JsonRpcRespo
 #[cfg(test)]
 mod tests {
     use super::*;
+    use cdp_policy::{ApprovalConfig, PolicyEngine};
     use chrono::Duration;
 
     fn make_router() -> Router {
         let config = Arc::new(GateConfig::default());
         let (tx, _rx) = mpsc::channel(16);
-        Router::new(config, tx)
+
+        let gate_key = vec![0u8; 32];
+        let lease_manager = Arc::new(LeaseManager::new(gate_key.clone(), None));
+
+        let proxy_config = cdp_proxy::ProxyConfig::default();
+        let credential_provider = Arc::new(
+            cdp_proxy::credential::MockCredentialProvider::new(),
+        );
+        let proxy_manager = Arc::new(cdp_proxy::ProxyManager::new(
+            proxy_config,
+            Arc::clone(&lease_manager),
+            credential_provider,
+            Zeroizing::new(gate_key),
+            None,
+        ));
+
+        let approval_config = ApprovalConfig {
+            gui_command: "echo".to_string(),
+            timeout_seconds: 5,
+            show_binary_hash: true,
+            label_reason_untrusted: true,
+            max_reason_length: 200,
+        };
+        let tmp_dir = tempfile::tempdir().expect("tempdir");
+        let policy_dir = tmp_dir.keep();
+        let policy_engine = Arc::new(
+            PolicyEngine::new(policy_dir, approval_config).expect("PolicyEngine::new"),
+        );
+
+        Router::new(config, tx, lease_manager, proxy_manager, policy_engine)
     }
 
     // -----------------------------------------------------------------------

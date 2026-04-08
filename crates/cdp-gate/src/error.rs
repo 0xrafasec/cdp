@@ -32,6 +32,18 @@ pub enum GateError {
 
     #[error("crypto error: {0}")]
     Crypto(#[from] cdp_crypto::CryptoError),
+
+    #[error("policy error: {0}")]
+    Policy(#[from] cdp_policy::PolicyError),
+
+    #[error("lease error: {0}")]
+    Lease(#[from] cdp_lease::LeaseError),
+
+    #[error("proxy error: {0}")]
+    Proxy(#[from] cdp_proxy::ProxyError),
+
+    #[error("credential request denied: {0}")]
+    CredentialDenied(String),
 }
 
 // Standard JSON-RPC 2.0 error codes.
@@ -44,3 +56,6 @@ pub const REPLAY_DETECTED: i32 = -32010;
 pub const REGISTRATION_REQUIRED: i32 = -32011;
 pub const SESSION_INVALID: i32 = -32013;
 pub const AGENT_VERIFICATION_FAILED: i32 = -32020;
+pub const CREDENTIAL_DENIED: i32 = -32030;
+pub const LEASE_ERROR: i32 = -32031;
+pub const PROXY_ERROR: i32 = -32032;

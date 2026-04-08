@@ -5,6 +5,10 @@ edition.workspace = true
 
 [dependencies]
 cdp-crypto = { workspace = true }
+cdp-proxy = { workspace = true }
+cdp-policy = { workspace = true }
+cdp-lease = { workspace = true }
+cdp-audit = { workspace = true }
 tokio = { workspace = true }
 nix = { workspace = true }
 serde = { workspace = true }
@@ -26,3 +30,4 @@ zeroize = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3"
+cdp-proxy = { workspace = true, features = ["test-support"] }

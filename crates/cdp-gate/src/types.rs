@@ -107,6 +107,56 @@ pub struct RegisterResult {
 }
 
 // ---------------------------------------------------------------------------
+// cdp.requestCredential
+// ---------------------------------------------------------------------------
+
+/// Requested scope for a credential request.
+#[derive(Debug, Deserialize)]
+pub struct RequestedScope {
+    #[serde(default)]
+    pub hosts: Vec<String>,
+    #[serde(default)]
+    pub methods: Vec<String>,
+    #[serde(default)]
+    pub paths: Vec<String>,
+    pub ttl_seconds: Option<u64>,
+    pub max_requests: Option<u64>,
+}
+
+/// Parameters for `cdp.requestCredential`.
+#[derive(Debug, Deserialize)]
+pub struct RequestCredentialParams {
+    pub session_token: String,
+    pub credential_ref: String,
+    pub scope: RequestedScope,
+    pub reason: String,
+    pub nonce: String,
+    pub timestamp: String,
+}
+
+/// Successful response for `cdp.requestCredential`.
+#[derive(Debug, Serialize)]
+pub struct RequestCredentialResult {
+    pub status: String,
+    pub lease_id: String,
+    pub proxy_port: u16,
+    pub lease_token: String,
+    pub channel_binding_nonce: String,
+    pub ttl_seconds: u64,
+    pub granted_scope: GrantedScopeInfo,
+}
+
+/// Scope information returned to the agent.
+#[derive(Debug, Serialize)]
+pub struct GrantedScopeInfo {
+    pub hosts: Vec<String>,
+    pub methods: Vec<String>,
+    pub paths: Vec<String>,
+    pub ttl_seconds: Option<u64>,
+    pub max_requests: Option<u64>,
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
