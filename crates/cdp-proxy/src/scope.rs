@@ -102,9 +102,8 @@ pub fn validate_path(
         return Ok(());
     }
 
-    let allowed_set = build_glob_set(allowed_paths).map_err(|e| {
-        ProxyError::ScopeViolation(format!("invalid allowed path pattern: {e}"))
-    })?;
+    let allowed_set = build_glob_set(allowed_paths)
+        .map_err(|e| ProxyError::ScopeViolation(format!("invalid allowed path pattern: {e}")))?;
 
     if allowed_set.is_match(path) {
         Ok(())
@@ -123,7 +122,10 @@ pub fn validate_path(
 ///
 /// If `allowed_methods` is empty, all methods are permitted.
 /// Comparison is case-insensitive (methods are normalised to uppercase).
-pub fn validate_method(method: &http::Method, allowed_methods: &[String]) -> Result<(), ProxyError> {
+pub fn validate_method(
+    method: &http::Method,
+    allowed_methods: &[String],
+) -> Result<(), ProxyError> {
     if allowed_methods.is_empty() {
         return Ok(());
     }
@@ -207,10 +209,7 @@ const MAX_JSON_DEPTH: usize = 64;
 /// the first forbidden key found, or `None` if the value is clean.
 ///
 /// Recursion is bounded to [`MAX_JSON_DEPTH`] levels to prevent stack overflow.
-pub fn find_forbidden_field(
-    value: &serde_json::Value,
-    forbidden: &[String],
-) -> Option<String> {
+pub fn find_forbidden_field(value: &serde_json::Value, forbidden: &[String]) -> Option<String> {
     find_forbidden_field_bounded(value, forbidden, 0)
 }
 
@@ -281,11 +280,8 @@ mod tests {
 
     #[test]
     fn test_host_denied_not_in_list() {
-        let err = validate_host(
-            "evil.example.com",
-            &["api.example.com".to_string()],
-        )
-        .expect_err("unlisted host must fail");
+        let err = validate_host("evil.example.com", &["api.example.com".to_string()])
+            .expect_err("unlisted host must fail");
         assert!(matches!(err, ProxyError::ScopeViolation(_)));
     }
 
@@ -298,8 +294,7 @@ mod tests {
 
     #[test]
     fn test_path_glob_match() {
-        validate_path("/api/v1/users", &["/api/**".to_string()], &[])
-            .expect("glob must match");
+        validate_path("/api/v1/users", &["/api/**".to_string()], &[]).expect("glob must match");
     }
 
     #[test]
@@ -357,9 +352,11 @@ mod tests {
 
     #[test]
     fn test_method_denied() {
-        let err =
-            validate_method(&http::Method::DELETE, &["GET".to_string(), "POST".to_string()])
-                .expect_err("DELETE must be denied");
+        let err = validate_method(
+            &http::Method::DELETE,
+            &["GET".to_string(), "POST".to_string()],
+        )
+        .expect_err("DELETE must be denied");
         assert!(matches!(err, ProxyError::ScopeViolation(_)));
     }
 
@@ -394,7 +391,10 @@ mod tests {
         };
         let err = validate_body(Some(b"this is too large"), None, &constraints)
             .expect_err("body exceeding limit must fail");
-        assert!(matches!(err, ProxyError::BodyTooLarge { size: 17, limit: 5 }));
+        assert!(matches!(
+            err,
+            ProxyError::BodyTooLarge { size: 17, limit: 5 }
+        ));
     }
 
     // --- Content-type validation ---
@@ -429,9 +429,8 @@ mod tests {
             allowed_content_types: vec!["application/json".to_string()],
             ..Default::default()
         };
-        let err =
-            validate_body(Some(b"data"), Some("text/plain"), &constraints)
-                .expect_err("disallowed content type must fail");
+        let err = validate_body(Some(b"data"), Some("text/plain"), &constraints)
+            .expect_err("disallowed content type must fail");
         assert!(matches!(err, ProxyError::ContentTypeNotAllowed(_)));
     }
 

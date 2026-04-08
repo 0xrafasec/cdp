@@ -26,12 +26,13 @@ pub async fn pin_dns(hosts: &[String]) -> Result<HashMap<String, Vec<IpAddr>>, L
 
     for host in hosts {
         let addr_str = format!("{host}:0");
-        let resolved = tokio::net::lookup_host(addr_str).await.map_err(|e| {
-            LeaseError::DnsResolution {
-                host: host.clone(),
-                reason: e.to_string(),
-            }
-        })?;
+        let resolved =
+            tokio::net::lookup_host(addr_str)
+                .await
+                .map_err(|e| LeaseError::DnsResolution {
+                    host: host.clone(),
+                    reason: e.to_string(),
+                })?;
 
         let ips: Vec<IpAddr> = resolved.map(|sa| sa.ip()).collect();
 
@@ -73,7 +74,10 @@ mod tests {
     async fn test_pin_dns_localhost() {
         let hosts = vec!["localhost".to_string()];
         let result = pin_dns(&hosts).await;
-        assert!(result.is_ok(), "expected localhost to resolve, got: {result:?}");
+        assert!(
+            result.is_ok(),
+            "expected localhost to resolve, got: {result:?}"
+        );
         let pinned = result.unwrap();
         assert!(pinned.contains_key("localhost"));
         assert!(!pinned["localhost"].is_empty());

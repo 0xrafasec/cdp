@@ -62,9 +62,8 @@ pub(crate) fn hash_binary(path: &Path) -> Result<[u8; 32], GateError> {
 
 /// Resolve the binary path for a process by reading `/proc/<pid>/exe`.
 fn read_binary_path(pid: u32) -> Result<PathBuf, GateError> {
-    std::fs::read_link(format!("/proc/{pid}/exe")).map_err(|e| {
-        GateError::AgentVerification(format!("failed to read /proc/{pid}/exe: {e}"))
-    })
+    std::fs::read_link(format!("/proc/{pid}/exe"))
+        .map_err(|e| GateError::AgentVerification(format!("failed to read /proc/{pid}/exe: {e}")))
 }
 
 /// Read `/proc/<pid>/stat` and extract field 22 (starttime).
@@ -191,7 +190,11 @@ mod tests {
     #[test]
     fn read_binary_path_self() {
         let path = read_binary_path(std::process::id()).unwrap();
-        assert!(path.exists(), "binary path should exist: {}", path.display());
+        assert!(
+            path.exists(),
+            "binary path should exist: {}",
+            path.display()
+        );
     }
 
     #[test]

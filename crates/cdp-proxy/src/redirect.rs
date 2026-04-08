@@ -76,13 +76,11 @@ pub fn evaluate_redirect(
     }
 
     // Following is enabled: parse Location header.
-    let location_header = headers
-        .get(http::header::LOCATION)
-        .ok_or_else(|| {
-            ProxyError::RedirectBlocked(format!(
-                "3xx response (status {status}) has no Location header"
-            ))
-        })?;
+    let location_header = headers.get(http::header::LOCATION).ok_or_else(|| {
+        ProxyError::RedirectBlocked(format!(
+            "3xx response (status {status}) has no Location header"
+        ))
+    })?;
 
     let location_str = location_header.to_str().map_err(|_| {
         ProxyError::RedirectBlocked("Location header contains non-ASCII characters".to_string())
@@ -142,8 +140,7 @@ mod tests {
 
     #[test]
     fn test_follow_disabled_returns_pass_through() {
-        let headers =
-            make_headers_with_location("https://api.example.com/new-path");
+        let headers = make_headers_with_location("https://api.example.com/new-path");
         let action = evaluate_redirect(
             StatusCode::MOVED_PERMANENTLY,
             &headers,
@@ -157,13 +154,8 @@ mod tests {
     #[test]
     fn test_follow_disabled_302_returns_pass_through() {
         let headers = make_headers_with_location("https://other.example.com/");
-        let action = evaluate_redirect(
-            StatusCode::FOUND,
-            &headers,
-            false,
-            &[],
-        )
-        .expect("should not error");
+        let action =
+            evaluate_redirect(StatusCode::FOUND, &headers, false, &[]).expect("should not error");
         assert_eq!(action, RedirectAction::PassThrough);
     }
 
@@ -172,8 +164,8 @@ mod tests {
     #[test]
     fn test_non_redirect_status_returns_pass_through() {
         let headers = make_headers_with_location("https://example.com/");
-        let action = evaluate_redirect(StatusCode::OK, &headers, true, &[])
-            .expect("should not error");
+        let action =
+            evaluate_redirect(StatusCode::OK, &headers, true, &[]).expect("should not error");
         assert_eq!(action, RedirectAction::PassThrough);
     }
 
@@ -181,8 +173,7 @@ mod tests {
 
     #[test]
     fn test_follow_enabled_allowed_host_returns_follow() {
-        let headers =
-            make_headers_with_location("https://api.example.com/v2/resource");
+        let headers = make_headers_with_location("https://api.example.com/v2/resource");
         let action = evaluate_redirect(
             StatusCode::MOVED_PERMANENTLY,
             &headers,
@@ -204,8 +195,7 @@ mod tests {
         // Empty allowed_hosts = no host restriction.
         let headers = make_headers_with_location("https://any.example.com/path");
         let action =
-            evaluate_redirect(StatusCode::FOUND, &headers, true, &[])
-                .expect("should not error");
+            evaluate_redirect(StatusCode::FOUND, &headers, true, &[]).expect("should not error");
         assert!(matches!(action, RedirectAction::Follow { .. }));
     }
 
@@ -284,8 +274,7 @@ mod tests {
 
     #[test]
     fn test_follow_strips_port_from_host() {
-        let headers =
-            make_headers_with_location("https://api.example.com:8443/path");
+        let headers = make_headers_with_location("https://api.example.com:8443/path");
         let action = evaluate_redirect(
             StatusCode::FOUND,
             &headers,

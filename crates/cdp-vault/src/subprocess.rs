@@ -5,8 +5,8 @@
 //! over a Unix socket pair using the length-prefixed IPC protocol defined in
 //! [`crate::protocol`].
 
-use std::pin::Pin;
 use std::future::Future;
+use std::pin::Pin;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
@@ -101,9 +101,7 @@ impl SubprocessManager {
 
         // Convert parent fd to a Tokio UnixStream.
         // SAFETY: parent_fd_raw is a valid, open, non-blocking-capable fd.
-        let std_stream = unsafe {
-            std::os::unix::net::UnixStream::from_raw_fd(parent_fd_raw)
-        };
+        let std_stream = unsafe { std::os::unix::net::UnixStream::from_raw_fd(parent_fd_raw) };
         std_stream
             .set_nonblocking(true)
             .map_err(|e| VaultError::Subprocess(format!("set_nonblocking: {e}")))?;
@@ -229,19 +227,19 @@ impl VaultBackend for SubprocessManager {
             let response = self.send_command(cmd).await?;
             let data = Self::ok_or_err(response)?;
 
-            let data_b64 = data["data"]
-                .as_str()
-                .ok_or_else(|| VaultError::Protocol("missing 'data' in fetch response".to_string()))?;
-            let nonce_b64 = data["nonce"]
-                .as_str()
-                .ok_or_else(|| VaultError::Protocol("missing 'nonce' in fetch response".to_string()))?;
+            let data_b64 = data["data"].as_str().ok_or_else(|| {
+                VaultError::Protocol("missing 'data' in fetch response".to_string())
+            })?;
+            let nonce_b64 = data["nonce"].as_str().ok_or_else(|| {
+                VaultError::Protocol("missing 'nonce' in fetch response".to_string())
+            })?;
 
-            let data_bytes = BASE64.decode(data_b64).map_err(|e| {
-                VaultError::Protocol(format!("base64 decode 'data': {e}"))
-            })?;
-            let nonce_bytes = BASE64.decode(nonce_b64).map_err(|e| {
-                VaultError::Protocol(format!("base64 decode 'nonce': {e}"))
-            })?;
+            let data_bytes = BASE64
+                .decode(data_b64)
+                .map_err(|e| VaultError::Protocol(format!("base64 decode 'data': {e}")))?;
+            let nonce_bytes = BASE64
+                .decode(nonce_b64)
+                .map_err(|e| VaultError::Protocol(format!("base64 decode 'nonce': {e}")))?;
 
             if nonce_bytes.len() != 12 {
                 return Err(VaultError::Protocol(format!(

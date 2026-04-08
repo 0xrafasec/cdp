@@ -49,7 +49,11 @@ pub trait CredentialProvider: Send + Sync {
         &'a self,
         credential_ref: &'a str,
         lease_id: &'a str,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<CredentialHeader>, ProxyError>> + Send + 'a>>;
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<Output = Result<Vec<CredentialHeader>, ProxyError>> + Send + 'a,
+        >,
+    >;
 }
 
 // ---------------------------------------------------------------------------
@@ -98,7 +102,11 @@ impl CredentialProvider for MockCredentialProvider {
         &'a self,
         credential_ref: &'a str,
         _lease_id: &'a str,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<CredentialHeader>, ProxyError>> + Send + 'a>> {
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<Output = Result<Vec<CredentialHeader>, ProxyError>> + Send + 'a,
+        >,
+    > {
         let result = match self.credentials.get(credential_ref) {
             Some(value) => {
                 let header = CredentialHeader {
@@ -141,14 +149,14 @@ mod tests {
     #[tokio::test]
     async fn test_mock_provider_missing_credential() {
         let provider = MockCredentialProvider::new();
-        let result = provider
-            .fetch_credential("nonexistent", "lease-xyz")
-            .await;
+        let result = provider.fetch_credential("nonexistent", "lease-xyz").await;
 
         match result {
             Err(ProxyError::CredentialInjection(_)) => {}
-            other => panic!("expected CredentialInjection error, got: {other:?}",
-                other = other.map(|_| "Ok(...)").map_err(|e| e.to_string())),
+            other => panic!(
+                "expected CredentialInjection error, got: {other:?}",
+                other = other.map(|_| "Ok(...)").map_err(|e| e.to_string())
+            ),
         }
     }
 

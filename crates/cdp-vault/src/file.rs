@@ -103,9 +103,8 @@ impl FileBackend {
         let key = derive_key(password, salt)?;
         let plaintext_vec = chacha_decrypt(&key, nonce_bytes, ciphertext)?;
 
-        let vault: DevVaultFile = serde_json::from_slice(&plaintext_vec).map_err(|e| {
-            VaultError::Protocol(format!("failed to parse vault JSON: {e}"))
-        })?;
+        let vault: DevVaultFile = serde_json::from_slice(&plaintext_vec)
+            .map_err(|e| VaultError::Protocol(format!("failed to parse vault JSON: {e}")))?;
         // Zeroize the decrypted JSON plaintext now that it has been parsed.
         let mut plaintext_zeroizing = Zeroizing::new(plaintext_vec);
         plaintext_zeroizing.zeroize();
@@ -216,9 +215,7 @@ impl VaultBackend for FileBackend {
                         data,
                         nonce: nonce.into(),
                     }),
-                    Err(e) => Err(VaultError::Decryption(format!(
-                        "encrypt credential: {e}"
-                    ))),
+                    Err(e) => Err(VaultError::Decryption(format!("encrypt credential: {e}"))),
                 }
             }
         };
@@ -253,8 +250,13 @@ impl VaultBackend for FileBackend {
 
 /// Derive a 32-byte key from `password` and `salt` using Argon2id.
 fn derive_key(password: &str, salt: &[u8]) -> Result<Zeroizing<[u8; ARGON2_KEY_LEN]>, VaultError> {
-    let params = Params::new(ARGON2_M_COST, ARGON2_T_COST, ARGON2_P_COST, Some(ARGON2_KEY_LEN))
-        .map_err(|e| VaultError::Decryption(format!("Argon2id params: {e}")))?;
+    let params = Params::new(
+        ARGON2_M_COST,
+        ARGON2_T_COST,
+        ARGON2_P_COST,
+        Some(ARGON2_KEY_LEN),
+    )
+    .map_err(|e| VaultError::Decryption(format!("Argon2id params: {e}")))?;
 
     let argon2 = Argon2::new(argon2::Algorithm::Argon2id, argon2::Version::V0x13, params);
 
@@ -267,7 +269,11 @@ fn derive_key(password: &str, salt: &[u8]) -> Result<Zeroizing<[u8; ARGON2_KEY_L
 }
 
 /// Encrypt `plaintext` with ChaCha20-Poly1305 using the pre-generated `nonce_bytes`.
-fn chacha_encrypt(key: &[u8; 32], nonce_bytes: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, VaultError> {
+fn chacha_encrypt(
+    key: &[u8; 32],
+    nonce_bytes: &[u8],
+    plaintext: &[u8],
+) -> Result<Vec<u8>, VaultError> {
     let cipher = ChaCha20Poly1305::new(key.into());
     let nonce = chacha20poly1305::Nonce::from_slice(nonce_bytes);
     cipher
@@ -276,12 +282,16 @@ fn chacha_encrypt(key: &[u8; 32], nonce_bytes: &[u8], plaintext: &[u8]) -> Resul
 }
 
 /// Decrypt `ciphertext` with ChaCha20-Poly1305.
-fn chacha_decrypt(key: &[u8; 32], nonce_bytes: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>, VaultError> {
+fn chacha_decrypt(
+    key: &[u8; 32],
+    nonce_bytes: &[u8],
+    ciphertext: &[u8],
+) -> Result<Vec<u8>, VaultError> {
     let cipher = ChaCha20Poly1305::new(key.into());
     let nonce = chacha20poly1305::Nonce::from_slice(nonce_bytes);
-    cipher
-        .decrypt(nonce, ciphertext)
-        .map_err(|_| VaultError::Decryption("decryption failed (wrong password or corrupted file)".to_string()))
+    cipher.decrypt(nonce, ciphertext).map_err(|_| {
+        VaultError::Decryption("decryption failed (wrong password or corrupted file)".to_string())
+    })
 }
 
 // ---------------------------------------------------------------------------

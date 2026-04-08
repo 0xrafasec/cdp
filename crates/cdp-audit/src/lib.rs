@@ -28,5 +28,5 @@ pub enum AuditError {
 }
 
 // Re-export key public types.
-pub use integrity::{verify_chain, ChainStatus};
+pub use integrity::{ChainStatus, verify_chain};
 pub use logger::{AuditEntry, AuditEventType, AuditFields, AuditLogger};

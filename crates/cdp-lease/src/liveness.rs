@@ -67,7 +67,10 @@ pub fn spawn_liveness_handler(
             {
                 Ok(revoked) => {
                     if revoked.is_empty() {
-                        info!(pid = notice.pid, "no active leases to revoke for dead agent");
+                        info!(
+                            pid = notice.pid,
+                            "no active leases to revoke for dead agent"
+                        );
                     } else {
                         info!(
                             pid = notice.pid,
@@ -151,11 +154,25 @@ mod tests {
         let agent = agent_with_fingerprint(fingerprint, 100);
 
         let l1 = manager
-            .create_lease(&agent, "cred-1", test_scope(), &test_constraints(), "p", "auto")
+            .create_lease(
+                &agent,
+                "cred-1",
+                test_scope(),
+                &test_constraints(),
+                "p",
+                "auto",
+            )
             .await
             .unwrap();
         let l2 = manager
-            .create_lease(&agent, "cred-2", test_scope(), &test_constraints(), "p", "auto")
+            .create_lease(
+                &agent,
+                "cred-2",
+                test_scope(),
+                &test_constraints(),
+                "p",
+                "auto",
+            )
             .await
             .unwrap();
 
@@ -194,11 +211,25 @@ mod tests {
         let agent_b = agent_with_fingerprint(fp_b, 200);
 
         let la = manager
-            .create_lease(&agent_a, "cred-a", test_scope(), &test_constraints(), "p", "auto")
+            .create_lease(
+                &agent_a,
+                "cred-a",
+                test_scope(),
+                &test_constraints(),
+                "p",
+                "auto",
+            )
             .await
             .unwrap();
         let lb = manager
-            .create_lease(&agent_b, "cred-b", test_scope(), &test_constraints(), "p", "auto")
+            .create_lease(
+                &agent_b,
+                "cred-b",
+                test_scope(),
+                &test_constraints(),
+                "p",
+                "auto",
+            )
             .await
             .unwrap();
 

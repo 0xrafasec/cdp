@@ -148,7 +148,9 @@ pub(crate) fn compute_entry_hash(entry: &AuditEntry) -> String {
     let seq_str = entry.sequence.to_string();
     hash_field(&mut hasher, seq_str.as_bytes());
 
-    let ts_str = entry.timestamp.to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
+    let ts_str = entry
+        .timestamp
+        .to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
     hash_field(&mut hasher, ts_str.as_bytes());
 
     let event_str = entry.event.to_string();
@@ -156,12 +158,7 @@ pub(crate) fn compute_entry_hash(entry: &AuditEntry) -> String {
 
     hash_field(
         &mut hasher,
-        entry
-            .fields
-            .lease_id
-            .as_deref()
-            .unwrap_or("")
-            .as_bytes(),
+        entry.fields.lease_id.as_deref().unwrap_or("").as_bytes(),
     );
     hash_field(
         &mut hasher,
@@ -261,9 +258,7 @@ impl AuditLogger {
             None => {
                 let base = std::env::var_os("XDG_DATA_HOME")
                     .map(PathBuf::from)
-                    .unwrap_or_else(|| {
-                        dirs_fallback_home().join(".local").join("share")
-                    });
+                    .unwrap_or_else(|| dirs_fallback_home().join(".local").join("share"));
                 base.join("cdp").join("audit.jsonl")
             }
         };
@@ -305,11 +300,7 @@ impl AuditLogger {
     ///
     /// Internally: increments the sequence counter, stamps the time, chains
     /// the hash, serialises to JSON, and flushes to disk.
-    pub async fn log(
-        &self,
-        event: AuditEventType,
-        fields: AuditFields,
-    ) -> Result<(), AuditError> {
+    pub async fn log(&self, event: AuditEventType, fields: AuditFields) -> Result<(), AuditError> {
         let timestamp = Utc::now();
 
         // Lock prev_hash for the duration of hash computation + write so that
@@ -335,9 +326,7 @@ impl AuditLogger {
 
         {
             let mut file_guard = self.file.lock().await;
-            file_guard
-                .write_all(line.as_bytes())
-                .await?;
+            file_guard.write_all(line.as_bytes()).await?;
             file_guard.write_all(b"\n").await?;
             file_guard.flush().await?;
         }
@@ -356,16 +345,14 @@ impl AuditLogger {
 /// If the file is empty, returns `(0, "genesis")`.
 async fn read_last_entry_state(path: &std::path::Path) -> Result<(u64, String), AuditError> {
     let content = tokio::fs::read_to_string(path).await?;
-    let last_line = content
-        .lines()
-        .rfind(|l| !l.trim().is_empty());
+    let last_line = content.lines().rfind(|l| !l.trim().is_empty());
 
     let Some(line) = last_line else {
         return Ok((0, "genesis".to_string()));
     };
 
-    let entry: AuditEntry = serde_json::from_str(line)
-        .map_err(|e| AuditError::InvalidEntry(0, e.to_string()))?;
+    let entry: AuditEntry =
+        serde_json::from_str(line).map_err(|e| AuditError::InvalidEntry(0, e.to_string()))?;
 
     Ok((entry.sequence, entry.hash))
 }
@@ -472,9 +459,7 @@ mod tests {
 
         // First logger session: write 2 entries.
         {
-            let logger = AuditLogger::new(Some(log_path.clone()))
-                .await
-                .unwrap();
+            let logger = AuditLogger::new(Some(log_path.clone())).await.unwrap();
             logger
                 .log(AuditEventType::AgentRegistered, AuditFields::default())
                 .await
@@ -487,9 +472,7 @@ mod tests {
 
         // Second logger session: write 1 more entry.
         {
-            let logger = AuditLogger::new(Some(log_path.clone()))
-                .await
-                .unwrap();
+            let logger = AuditLogger::new(Some(log_path.clone())).await.unwrap();
             logger
                 .log(AuditEventType::LeaseUsed, AuditFields::default())
                 .await

@@ -21,15 +21,14 @@ use inotify::{EventMask, Inotify, WatchMask};
 use tracing::{error, info, warn};
 
 use crate::error::PolicyError;
-use crate::parser::{load_policies_from_dir, PolicyEntry};
+use crate::parser::{PolicyEntry, load_policies_from_dir};
 
 // ---------------------------------------------------------------------------
 // Known editor binaries (heuristic for modifier identification)
 // ---------------------------------------------------------------------------
 
 const KNOWN_EDITORS: &[&str] = &[
-    "vim", "nvim", "nano", "code", "kate", "gedit", "emacs", "helix", "subl",
-    "micro", "vi",
+    "vim", "nvim", "nano", "code", "kate", "gedit", "emacs", "helix", "subl", "micro", "vi",
 ];
 
 // ---------------------------------------------------------------------------
@@ -82,10 +81,7 @@ impl PolicyWatcher {
             .watches()
             .add(
                 &self.policy_dir,
-                WatchMask::MODIFY
-                    | WatchMask::CREATE
-                    | WatchMask::DELETE
-                    | WatchMask::MOVED_TO,
+                WatchMask::MODIFY | WatchMask::CREATE | WatchMask::DELETE | WatchMask::MOVED_TO,
             )
             .map_err(|e| {
                 PolicyError::Watcher(format!(
@@ -136,10 +132,7 @@ impl PolicyWatcher {
 
             // Best-effort: identify which process modified one of the affected files.
             for ev in &events {
-                let modified_path = ev
-                    .name
-                    .as_deref()
-                    .map(|n| self.policy_dir.join(n));
+                let modified_path = ev.name.as_deref().map(|n| self.policy_dir.join(n));
 
                 if let Some(path) = modified_path {
                     match identify_modifier(&path) {
@@ -224,10 +217,7 @@ fn read_inotify_events(policy_dir: &Path) -> Result<Vec<EventInfo>, PolicyError>
         .watches()
         .add(
             policy_dir,
-            WatchMask::MODIFY
-                | WatchMask::CREATE
-                | WatchMask::DELETE
-                | WatchMask::MOVED_TO,
+            WatchMask::MODIFY | WatchMask::CREATE | WatchMask::DELETE | WatchMask::MOVED_TO,
         )
         .map_err(|e| {
             PolicyError::Watcher(format!(
@@ -490,8 +480,7 @@ hosts = ["example.com"]
         std::fs::write(policy_dir.join("exit.toml"), policy_toml).expect("write failed");
 
         // The watcher task should finish within a reasonable timeout.
-        let result =
-            tokio::time::timeout(Duration::from_secs(5), handle).await;
+        let result = tokio::time::timeout(Duration::from_secs(5), handle).await;
         assert!(
             result.is_ok(),
             "watcher task should exit cleanly after receiver is dropped"
@@ -552,9 +541,6 @@ hosts = ["updated.example.com"]
 
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].name, "updated");
-        assert_eq!(
-            entries[0].match_block.credential_ref,
-            "cred"
-        );
+        assert_eq!(entries[0].match_block.credential_ref, "cred");
     }
 }

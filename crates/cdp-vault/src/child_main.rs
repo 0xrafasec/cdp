@@ -87,75 +87,62 @@ pub fn vault_worker_main(socket_fd: i32, bw_cli_path: &str, sandbox_enabled: boo
 /// Dispatch a single [`VaultCommand`] to the backend and return a [`VaultResponse`].
 fn dispatch(backend: &mut BitwardenBackend, cmd: VaultCommand) -> VaultResponse {
     match cmd {
-        VaultCommand::Init { key } => {
-            match BASE64.decode(&key) {
-                Ok(mut bytes) if bytes.len() == 32 => {
-                    let mut ipc_key = [0u8; 32];
-                    ipc_key.copy_from_slice(&bytes);
-                    bytes.zeroize();
-                    backend.set_ipc_key(ipc_key);
-                    VaultResponse::Ok {
-                        data: serde_json::Value::Null,
-                    }
-                }
-                Ok(bytes) => VaultResponse::Error {
-                    message: format!(
-                        "Init key must be 32 bytes, got {}",
-                        bytes.len()
-                    ),
-                },
-                Err(e) => VaultResponse::Error {
-                    message: format!("Init key base64 decode error: {e}"),
-                },
-            }
-        }
-
-        VaultCommand::Unlock { password } => {
-            match backend.unlock(&password) {
-                Ok(()) => VaultResponse::Ok {
+        VaultCommand::Init { key } => match BASE64.decode(&key) {
+            Ok(mut bytes) if bytes.len() == 32 => {
+                let mut ipc_key = [0u8; 32];
+                ipc_key.copy_from_slice(&bytes);
+                bytes.zeroize();
+                backend.set_ipc_key(ipc_key);
+                VaultResponse::Ok {
                     data: serde_json::Value::Null,
-                },
-                Err(e) => VaultResponse::Error {
-                    message: e.to_string(),
-                },
-            }
-        }
-
-        VaultCommand::List => {
-            match backend.list() {
-                Ok(refs) => VaultResponse::Ok {
-                    data: serde_json::to_value(refs).unwrap_or(serde_json::Value::Null),
-                },
-                Err(e) => VaultResponse::Error {
-                    message: e.to_string(),
-                },
-            }
-        }
-
-        VaultCommand::Fetch { ref_id } => {
-            match backend.fetch(&ref_id) {
-                Ok(enc) => {
-                    let payload = serde_json::json!({
-                        "data": BASE64.encode(&enc.data),
-                        "nonce": BASE64.encode(enc.nonce),
-                    });
-                    VaultResponse::Ok { data: payload }
                 }
-                Err(e) => VaultResponse::Error {
-                    message: e.to_string(),
-                },
             }
-        }
+            Ok(bytes) => VaultResponse::Error {
+                message: format!("Init key must be 32 bytes, got {}", bytes.len()),
+            },
+            Err(e) => VaultResponse::Error {
+                message: format!("Init key base64 decode error: {e}"),
+            },
+        },
 
-        VaultCommand::Exists { ref_id } => {
-            match backend.exists(&ref_id) {
-                Ok(found) => VaultResponse::Ok {
-                    data: serde_json::Value::Bool(found),
-                },
-                Err(e) => VaultResponse::Error {
-                    message: e.to_string(),
-                },
+        VaultCommand::Unlock { password } => match backend.unlock(&password) {
+            Ok(()) => VaultResponse::Ok {
+                data: serde_json::Value::Null,
+            },
+            Err(e) => VaultResponse::Error {
+                message: e.to_string(),
+            },
+        },
+
+        VaultCommand::List => match backend.list() {
+            Ok(refs) => VaultResponse::Ok {
+                data: serde_json::to_value(refs).unwrap_or(serde_json::Value::Null),
+            },
+            Err(e) => VaultResponse::Error {
+                message: e.to_string(),
+            },
+        },
+
+        VaultCommand::Fetch { ref_id } => match backend.fetch(&ref_id) {
+            Ok(enc) => {
+                let payload = serde_json::json!({
+                    "data": BASE64.encode(&enc.data),
+                    "nonce": BASE64.encode(enc.nonce),
+                });
+                VaultResponse::Ok { data: payload }
             }
-        }
+            Err(e) => VaultResponse::Error {
+                message: e.to_string(),
+            },
+        },
+
+        VaultCommand::Exists { ref_id } => match backend.exists(&ref_id) {
+            Ok(found) => VaultResponse::Ok {
+                data: serde_json::Value::Bool(found),
+            },
+            Err(e) => VaultResponse::Error {
+                message: e.to_string(),
+            },
+        },
     }
 }

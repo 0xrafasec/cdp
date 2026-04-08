@@ -5,7 +5,10 @@
 
 use std::path::Path;
 
-use crate::{AuditError, logger::{AuditEntry, compute_entry_hash}};
+use crate::{
+    AuditError,
+    logger::{AuditEntry, compute_entry_hash},
+};
 
 // ---------------------------------------------------------------------------
 // ChainStatus
@@ -38,10 +41,7 @@ pub enum ChainStatus {
 pub async fn verify_chain(path: &Path) -> Result<ChainStatus, AuditError> {
     let content = tokio::fs::read_to_string(path).await?;
 
-    let lines: Vec<&str> = content
-        .lines()
-        .filter(|l| !l.trim().is_empty())
-        .collect();
+    let lines: Vec<&str> = content.lines().filter(|l| !l.trim().is_empty()).collect();
 
     if lines.is_empty() {
         return Ok(ChainStatus::Empty);
@@ -156,8 +156,7 @@ mod tests {
         let mut lines: Vec<String> = raw.lines().map(String::from).collect();
 
         // Tamper with entry 3 (index 2): change credential_ref.
-        let mut entry: serde_json::Value =
-            serde_json::from_str(&lines[2]).expect("must parse");
+        let mut entry: serde_json::Value = serde_json::from_str(&lines[2]).expect("must parse");
         entry["credential_ref"] = serde_json::Value::String("TAMPERED".to_string());
         lines[2] = serde_json::to_string(&entry).unwrap();
 
@@ -191,10 +190,8 @@ mod tests {
         let mut lines: Vec<String> = raw.lines().map(String::from).collect();
 
         // Corrupt the prev_hash field of entry 2 (index 1).
-        let mut entry: serde_json::Value =
-            serde_json::from_str(&lines[1]).expect("must parse");
-        entry["prev_hash"] =
-            serde_json::Value::String("sha256:deadbeefdeadbeef".to_string());
+        let mut entry: serde_json::Value = serde_json::from_str(&lines[1]).expect("must parse");
+        entry["prev_hash"] = serde_json::Value::String("sha256:deadbeefdeadbeef".to_string());
         lines[1] = serde_json::to_string(&entry).unwrap();
 
         tokio::fs::write(&log_path, lines.join("\n") + "\n")

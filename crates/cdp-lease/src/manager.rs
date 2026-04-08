@@ -5,22 +5,18 @@
 //! bounded renewals, cumulative-TTL caps, request limits, and cascading
 //! revocation of child leases.
 
-use std::{
-    collections::HashMap,
-    sync::Arc,
-};
+use std::{collections::HashMap, sync::Arc};
 
 use chrono::{Duration, Utc};
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{RwLock, mpsc};
 use tracing::{debug, info, warn};
 
 use cdp_audit::{AuditEventType, AuditFields};
 use cdp_policy::{AgentInfo, PolicyConstraints, Scope};
 
 use crate::{
-    channel_bind, dns_pin,
+    LeaseError, channel_bind, dns_pin,
     types::{Lease, LeaseId, LeaseStatus},
-    LeaseError,
 };
 
 // ---------------------------------------------------------------------------
@@ -120,10 +116,7 @@ impl LeaseManager {
             policy_name: policy_name.to_string(),
             approval_method: approval_method.to_string(),
             agent_fingerprint_hash: agent_info.fingerprint_hash,
-            agent_binary_path: agent_info
-                .binary_path
-                .to_string_lossy()
-                .into_owned(),
+            agent_binary_path: agent_info.binary_path.to_string_lossy().into_owned(),
             agent_uid: agent_info.uid,
             agent_pid: agent_info.pid,
             granted_scope,
@@ -167,9 +160,7 @@ impl LeaseManager {
             AuditFields {
                 lease_id: Some(lease_id.to_string()),
                 agent_fingerprint: Some(hex_encode(&agent_info.fingerprint_hash)),
-                agent_binary_path: Some(
-                    agent_info.binary_path.to_string_lossy().into_owned(),
-                ),
+                agent_binary_path: Some(agent_info.binary_path.to_string_lossy().into_owned()),
                 credential_ref: Some(credential_ref.to_string()),
                 policy_matched: Some(policy_name.to_string()),
                 approval_method: Some(approval_method.to_string()),
@@ -607,7 +598,14 @@ mod tests {
         let constraints = test_constraints();
 
         let lease = manager
-            .create_lease(&agent, "cred-001", test_scope(), &constraints, "test-policy", "auto")
+            .create_lease(
+                &agent,
+                "cred-001",
+                test_scope(),
+                &constraints,
+                "test-policy",
+                "auto",
+            )
             .await
             .expect("create_lease should succeed");
 
@@ -633,7 +631,14 @@ mod tests {
         let manager = make_manager();
         let agent = test_agent();
         let lease = manager
-            .create_lease(&agent, "cred-001", test_scope(), &test_constraints(), "p", "auto")
+            .create_lease(
+                &agent,
+                "cred-001",
+                test_scope(),
+                &test_constraints(),
+                "p",
+                "auto",
+            )
             .await
             .unwrap();
 
@@ -642,7 +647,10 @@ mod tests {
 
         let renewed = manager.get_lease(&lease.lease_id).await.unwrap();
         assert_eq!(renewed.renewals_used, 1);
-        assert_eq!(renewed.cumulative_ttl_seconds, lease.cumulative_ttl_seconds + 600);
+        assert_eq!(
+            renewed.cumulative_ttl_seconds,
+            lease.cumulative_ttl_seconds + 600
+        );
         assert!(renewed.expires_at > original_expires);
     }
 
@@ -724,7 +732,14 @@ mod tests {
         let manager = make_manager();
         let agent = test_agent();
         let lease = manager
-            .create_lease(&agent, "cred", test_scope(), &test_constraints(), "p", "auto")
+            .create_lease(
+                &agent,
+                "cred",
+                test_scope(),
+                &test_constraints(),
+                "p",
+                "auto",
+            )
             .await
             .unwrap();
 
@@ -761,11 +776,21 @@ mod tests {
         let manager = make_manager();
         let agent = test_agent();
         let lease = manager
-            .create_lease(&agent, "cred", test_scope(), &test_constraints(), "p", "auto")
+            .create_lease(
+                &agent,
+                "cred",
+                test_scope(),
+                &test_constraints(),
+                "p",
+                "auto",
+            )
             .await
             .unwrap();
 
-        manager.revoke_lease(&lease.lease_id, "test revocation").await.unwrap();
+        manager
+            .revoke_lease(&lease.lease_id, "test revocation")
+            .await
+            .unwrap();
 
         let fetched = manager.get_lease(&lease.lease_id).await.unwrap();
         assert!(
@@ -781,13 +806,23 @@ mod tests {
         let manager = Arc::new(make_manager());
         let agent = test_agent();
         let parent = manager
-            .create_lease(&agent, "cred", test_scope(), &test_constraints(), "p", "auto")
+            .create_lease(
+                &agent,
+                "cred",
+                test_scope(),
+                &test_constraints(),
+                "p",
+                "auto",
+            )
             .await
             .unwrap();
 
         let child = delegate_child(&manager, &parent, &agent).await;
 
-        manager.revoke_lease(&parent.lease_id, "cascade test").await.unwrap();
+        manager
+            .revoke_lease(&parent.lease_id, "cascade test")
+            .await
+            .unwrap();
 
         let parent_fetched = manager.get_lease(&parent.lease_id).await.unwrap();
         let child_fetched = manager.get_lease(&child.lease_id).await.unwrap();
@@ -801,7 +836,14 @@ mod tests {
         let manager = make_manager();
         let agent = test_agent();
         let lease = manager
-            .create_lease(&agent, "cred-abc", test_scope(), &test_constraints(), "pol", "auto")
+            .create_lease(
+                &agent,
+                "cred-abc",
+                test_scope(),
+                &test_constraints(),
+                "pol",
+                "auto",
+            )
             .await
             .unwrap();
 
@@ -816,11 +858,25 @@ mod tests {
         let agent = test_agent();
 
         let l1 = manager
-            .create_lease(&agent, "cred-1", test_scope(), &test_constraints(), "p", "auto")
+            .create_lease(
+                &agent,
+                "cred-1",
+                test_scope(),
+                &test_constraints(),
+                "p",
+                "auto",
+            )
             .await
             .unwrap();
         let l2 = manager
-            .create_lease(&agent, "cred-2", test_scope(), &test_constraints(), "p", "auto")
+            .create_lease(
+                &agent,
+                "cred-2",
+                test_scope(),
+                &test_constraints(),
+                "p",
+                "auto",
+            )
             .await
             .unwrap();
 

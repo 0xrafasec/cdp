@@ -11,10 +11,9 @@ use cdp_audit::{AuditEventType, AuditFields};
 use cdp_policy::{AgentInfo, Scope};
 
 use crate::{
-    channel_bind, dns_pin,
-    manager::{hex_encode, LeaseManager},
+    LeaseError, channel_bind, dns_pin,
+    manager::{LeaseManager, hex_encode},
     types::{Lease, LeaseId, LeaseStatus},
-    LeaseError,
 };
 
 impl LeaseManager {
@@ -129,10 +128,7 @@ impl LeaseManager {
                 policy_name: "delegated".to_string(),
                 approval_method: "delegation".to_string(),
                 agent_fingerprint_hash: target_agent.fingerprint_hash,
-                agent_binary_path: target_agent
-                    .binary_path
-                    .to_string_lossy()
-                    .into_owned(),
+                agent_binary_path: target_agent.binary_path.to_string_lossy().into_owned(),
                 agent_uid: target_agent.uid,
                 agent_pid: target_agent.pid,
                 granted_scope: child_scope,
@@ -212,8 +208,8 @@ pub(crate) mod tests {
     use std::path::PathBuf;
     use std::sync::Arc;
 
-    use cdp_policy::{PolicyConstraints, Scope};
     use crate::Lease;
+    use cdp_policy::{PolicyConstraints, Scope};
 
     const GATE_KEY: &[u8] = b"test-gate-key-for-unit-tests";
 
@@ -301,7 +297,14 @@ pub(crate) mod tests {
         let child = child_agent();
 
         let parent = manager
-            .create_lease(&agent, "cred", parent_scope(), &test_constraints(), "p", "auto")
+            .create_lease(
+                &agent,
+                "cred",
+                parent_scope(),
+                &test_constraints(),
+                "p",
+                "auto",
+            )
             .await
             .unwrap();
 
@@ -316,7 +319,11 @@ pub(crate) mod tests {
 
         // Verify parent has the child linked.
         let parent_fetched = manager.get_lease(&parent.lease_id).await.unwrap();
-        assert!(parent_fetched.child_lease_ids.contains(&child_lease.lease_id));
+        assert!(
+            parent_fetched
+                .child_lease_ids
+                .contains(&child_lease.lease_id)
+        );
     }
 
     #[tokio::test]
@@ -326,7 +333,14 @@ pub(crate) mod tests {
         let child = child_agent();
 
         let parent = manager
-            .create_lease(&agent, "cred", parent_scope(), &test_constraints(), "p", "auto")
+            .create_lease(
+                &agent,
+                "cred",
+                parent_scope(),
+                &test_constraints(),
+                "p",
+                "auto",
+            )
             .await
             .unwrap();
 
@@ -351,7 +365,14 @@ pub(crate) mod tests {
         let child = child_agent();
 
         let parent = manager
-            .create_lease(&agent, "cred", parent_scope(), &test_constraints(), "p", "auto")
+            .create_lease(
+                &agent,
+                "cred",
+                parent_scope(),
+                &test_constraints(),
+                "p",
+                "auto",
+            )
             .await
             .unwrap();
 
@@ -469,7 +490,14 @@ pub(crate) mod tests {
         let child = child_agent();
 
         let parent = manager
-            .create_lease(&agent, "cred", parent_scope(), &test_constraints(), "p", "auto")
+            .create_lease(
+                &agent,
+                "cred",
+                parent_scope(),
+                &test_constraints(),
+                "p",
+                "auto",
+            )
             .await
             .unwrap();
 
@@ -487,7 +515,14 @@ pub(crate) mod tests {
         let child = child_agent();
 
         let parent = manager
-            .create_lease(&agent, "cred", parent_scope(), &test_constraints(), "p", "auto")
+            .create_lease(
+                &agent,
+                "cred",
+                parent_scope(),
+                &test_constraints(),
+                "p",
+                "auto",
+            )
             .await
             .unwrap();
 

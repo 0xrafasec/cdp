@@ -178,7 +178,7 @@ fn build_seccomp_filter() -> Result<BpfProgram, VaultError> {
     let filter = SeccompFilter::new(
         rules,
         SeccompAction::Errno(libc::EPERM as u32), // default: return EPERM
-        SeccompAction::Allow,                      // on match: allow
+        SeccompAction::Allow,                     // on match: allow
         arch,
     )
     .map_err(|e| VaultError::Sandbox(format!("SeccompFilter::new: {e}")))?;
@@ -201,12 +201,7 @@ pub fn close_extra_fds(keep_fd: RawFd) {
     if let Ok(entries) = std::fs::read_dir("/proc/self/fd") {
         let fds: Vec<RawFd> = entries
             .filter_map(|e| e.ok())
-            .filter_map(|e| {
-                e.file_name()
-                    .to_string_lossy()
-                    .parse::<RawFd>()
-                    .ok()
-            })
+            .filter_map(|e| e.file_name().to_string_lossy().parse::<RawFd>().ok())
             .filter(|fd| !protected.contains(fd))
             .collect();
 

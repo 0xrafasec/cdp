@@ -360,7 +360,10 @@ mod tests {
             policy_name: "write-ops".to_string(),
             constraints: constraints.clone(),
         };
-        assert!(matches!(needs_approval, PolicyDecision::RequiresApproval { .. }));
+        assert!(matches!(
+            needs_approval,
+            PolicyDecision::RequiresApproval { .. }
+        ));
 
         let denied = PolicyDecision::Denied {
             reason: "no matching rule".to_string(),
@@ -389,7 +392,12 @@ mod tests {
             policy_name: "my-policy".to_string(),
             constraints,
         };
-        if let PolicyDecision::AutoApprove { granted_scope, policy_name, constraints } = decision {
+        if let PolicyDecision::AutoApprove {
+            granted_scope,
+            policy_name,
+            constraints,
+        } = decision
+        {
             assert_eq!(granted_scope.hosts, vec!["api.example.com"]);
             assert_eq!(policy_name, "my-policy");
             assert_eq!(constraints.max_ttl_seconds, Some(3600));
@@ -404,17 +412,27 @@ mod tests {
         assert_eq!(ApprovalResult::AllowOnce, ApprovalResult::AllowOnce);
         assert_eq!(ApprovalResult::Deny, ApprovalResult::Deny);
         assert_eq!(
-            ApprovalResult::AllowTimed { duration_seconds: 300 },
-            ApprovalResult::AllowTimed { duration_seconds: 300 },
+            ApprovalResult::AllowTimed {
+                duration_seconds: 300
+            },
+            ApprovalResult::AllowTimed {
+                duration_seconds: 300
+            },
         );
         assert_ne!(
-            ApprovalResult::AllowTimed { duration_seconds: 300 },
-            ApprovalResult::AllowTimed { duration_seconds: 600 },
+            ApprovalResult::AllowTimed {
+                duration_seconds: 300
+            },
+            ApprovalResult::AllowTimed {
+                duration_seconds: 600
+            },
         );
         assert_ne!(ApprovalResult::AllowOnce, ApprovalResult::Deny);
         assert_ne!(
             ApprovalResult::AllowOnce,
-            ApprovalResult::AllowTimed { duration_seconds: 1 },
+            ApprovalResult::AllowTimed {
+                duration_seconds: 1
+            },
         );
     }
 
@@ -448,7 +466,9 @@ mod tests {
         assert_eq!(roundtrip.ttl_seconds, Some(1800));
         assert_eq!(roundtrip.max_requests, Some(100));
 
-        let bc = roundtrip.body_constraints.expect("body_constraints missing");
+        let bc = roundtrip
+            .body_constraints
+            .expect("body_constraints missing");
         assert_eq!(bc.forbidden_fields, vec!["password"]);
         assert_eq!(bc.max_size_bytes, Some(65536));
 

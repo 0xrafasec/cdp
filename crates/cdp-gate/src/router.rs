@@ -9,7 +9,7 @@ use lru::LruCache;
 use rand::RngCore;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
 use tokio::net::UnixStream;
-use tokio::sync::{mpsc, Mutex, RwLock};
+use tokio::sync::{Mutex, RwLock, mpsc};
 use uuid::Uuid;
 use zeroize::Zeroizing;
 
@@ -93,17 +93,16 @@ impl Router {
         // Route by method.
         match request.method.as_str() {
             "cdp.register" => {
-                let params: RegisterParams =
-                    match serde_json::from_value(request.params) {
-                        Ok(p) => p,
-                        Err(e) => {
-                            return JsonRpcResponse::error(
-                                id,
-                                INVALID_REQUEST,
-                                format!("invalid params: {e}"),
-                            );
-                        }
-                    };
+                let params: RegisterParams = match serde_json::from_value(request.params) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        return JsonRpcResponse::error(
+                            id,
+                            INVALID_REQUEST,
+                            format!("invalid params: {e}"),
+                        );
+                    }
+                };
                 match self.handle_register(params, peer, connection_id).await {
                     Ok(value) => JsonRpcResponse::success(id, value),
                     Err(e) => gate_error_to_response(id, e),
@@ -124,20 +123,25 @@ impl Router {
                         }
                     };
                 // Validate session using the session_token from params.
-                if let Err(e) =
-                    self.validate_session(&request.params, peer, connection_id).await
+                if let Err(e) = self
+                    .validate_session(&request.params, peer, connection_id)
+                    .await
                 {
                     return gate_error_to_response(id, e);
                 }
-                match self.handle_request_credential(params, peer, connection_id).await {
+                match self
+                    .handle_request_credential(params, peer, connection_id)
+                    .await
+                {
                     Ok(value) => JsonRpcResponse::success(id, value),
                     Err(e) => gate_error_to_response(id, e),
                 }
             }
             other => {
                 // Validate session first, then report method not found.
-                if let Err(e) =
-                    self.validate_session(&request.params, peer, connection_id).await
+                if let Err(e) = self
+                    .validate_session(&request.params, peer, connection_id)
+                    .await
                 {
                     return gate_error_to_response(id, e);
                 }
@@ -149,9 +153,8 @@ impl Router {
     /// Validate replay protection: nonce uniqueness and timestamp freshness.
     async fn validate_replay(&self, nonce: &str, timestamp: &str) -> Result<(), GateError> {
         // Validate nonce is a UUID v4.
-        let uuid = Uuid::parse_str(nonce).map_err(|_| {
-            GateError::Replay("nonce is not a valid UUID".to_string())
-        })?;
+        let uuid = Uuid::parse_str(nonce)
+            .map_err(|_| GateError::Replay("nonce is not a valid UUID".to_string()))?;
         if uuid.get_version_num() != 4 {
             return Err(GateError::Replay(
                 "nonce UUID version must be 4".to_string(),
@@ -159,9 +162,8 @@ impl Router {
         }
 
         // Parse timestamp as RFC 3339.
-        let ts = chrono::DateTime::parse_from_rfc3339(timestamp).map_err(|_| {
-            GateError::Replay("timestamp is not valid RFC 3339".to_string())
-        })?;
+        let ts = chrono::DateTime::parse_from_rfc3339(timestamp)
+            .map_err(|_| GateError::Replay("timestamp is not valid RFC 3339".to_string()))?;
         let ts_utc = ts.with_timezone(&Utc);
 
         // Reject if older than 30 seconds.
@@ -191,7 +193,8 @@ impl Router {
         connection_id: &[u8],
     ) -> Result<serde_json::Value, GateError> {
         // Replay protection.
-        self.validate_replay(&params.nonce, &params.timestamp).await?;
+        self.validate_replay(&params.nonce, &params.timestamp)
+            .await?;
 
         // Verify agent identity via /proc inspection.
         let fingerprint = crate::agent_verify::verify_agent(peer.pid, peer.uid).await?;
@@ -208,9 +211,10 @@ impl Router {
         let death_tx = self.death_tx.clone();
         let fp_hash = fingerprint.fingerprint_hash;
         let pid = peer.pid;
-        let pidfd = fingerprint.pidfd.try_clone().map_err(|e| {
-            GateError::Syscall(format!("failed to clone pidfd: {e}"))
-        })?;
+        let pidfd = fingerprint
+            .pidfd
+            .try_clone()
+            .map_err(|e| GateError::Syscall(format!("failed to clone pidfd: {e}")))?;
         tokio::spawn(async move {
             // Wait for pidfd to become readable (process exit).
             use tokio::io::unix::AsyncFd;
@@ -278,7 +282,8 @@ impl Router {
         connection_id: &[u8],
     ) -> Result<serde_json::Value, GateError> {
         // 1. Replay protection.
-        self.validate_replay(&params.nonce, &params.timestamp).await?;
+        self.validate_replay(&params.nonce, &params.timestamp)
+            .await?;
 
         // 2. Look up the registration for this peer.
         let registration = {
@@ -301,10 +306,18 @@ impl Router {
                 })
         };
 
-        let (uid, pid, binary_path, binary_hash, start_time, fingerprint_hash, agent_id, agent_version) =
-            registration.ok_or_else(|| {
-                GateError::SessionInvalid("no registration found for this peer".to_string())
-            })?;
+        let (
+            uid,
+            pid,
+            binary_path,
+            binary_hash,
+            start_time,
+            fingerprint_hash,
+            agent_id,
+            agent_version,
+        ) = registration.ok_or_else(|| {
+            GateError::SessionInvalid("no registration found for this peer".to_string())
+        })?;
 
         // 3. Build AgentInfo.
         let agent_info = AgentInfo {
@@ -422,9 +435,9 @@ impl Router {
 
         // Find the registration for this peer by scanning the registry.
         let registry = self.registry.read().await;
-        let registration = registry.values().find(|r| {
-            r.fingerprint.pid == peer.pid && r.connection_id == connection_id
-        });
+        let registration = registry
+            .values()
+            .find(|r| r.fingerprint.pid == peer.pid && r.connection_id == connection_id);
 
         let reg = registration.ok_or_else(|| {
             GateError::SessionInvalid("no registration found for this peer".to_string())
@@ -438,7 +451,9 @@ impl Router {
         );
 
         if !valid {
-            return Err(GateError::SessionInvalid("session token HMAC invalid".to_string()));
+            return Err(GateError::SessionInvalid(
+                "session token HMAC invalid".to_string(),
+            ));
         }
 
         Ok(())
@@ -554,15 +569,9 @@ fn gate_error_to_response(id: serde_json::Value, err: GateError) -> JsonRpcRespo
         GateError::CredentialDenied(_) => {
             JsonRpcResponse::error(id, CREDENTIAL_DENIED, err.to_string())
         }
-        GateError::Lease(_) => {
-            JsonRpcResponse::error(id, LEASE_ERROR, err.to_string())
-        }
-        GateError::Proxy(_) => {
-            JsonRpcResponse::error(id, PROXY_ERROR, err.to_string())
-        }
-        GateError::JsonRpc { code, message } => {
-            JsonRpcResponse::error(id, *code, message.clone())
-        }
+        GateError::Lease(_) => JsonRpcResponse::error(id, LEASE_ERROR, err.to_string()),
+        GateError::Proxy(_) => JsonRpcResponse::error(id, PROXY_ERROR, err.to_string()),
+        GateError::JsonRpc { code, message } => JsonRpcResponse::error(id, *code, message.clone()),
         _ => JsonRpcResponse::error(id, -32603, err.to_string()),
     }
 }
@@ -585,9 +594,7 @@ mod tests {
         let lease_manager = Arc::new(LeaseManager::new(gate_key.clone(), None));
 
         let proxy_config = cdp_proxy::ProxyConfig::default();
-        let credential_provider = Arc::new(
-            cdp_proxy::credential::MockCredentialProvider::new(),
-        );
+        let credential_provider = Arc::new(cdp_proxy::credential::MockCredentialProvider::new());
         let proxy_manager = Arc::new(cdp_proxy::ProxyManager::new(
             proxy_config,
             Arc::clone(&lease_manager),
@@ -605,9 +612,8 @@ mod tests {
         };
         let tmp_dir = tempfile::tempdir().expect("tempdir");
         let policy_dir = tmp_dir.keep();
-        let policy_engine = Arc::new(
-            PolicyEngine::new(policy_dir, approval_config).expect("PolicyEngine::new"),
-        );
+        let policy_engine =
+            Arc::new(PolicyEngine::new(policy_dir, approval_config).expect("PolicyEngine::new"));
 
         Router::new(config, tx, lease_manager, proxy_manager, policy_engine)
     }
@@ -649,10 +655,7 @@ mod tests {
     async fn validate_replay_invalid_uuid_rejected() {
         let router = make_router();
         let ts = Utc::now().to_rfc3339();
-        let err = router
-            .validate_replay("not-a-uuid", &ts)
-            .await
-            .unwrap_err();
+        let err = router.validate_replay("not-a-uuid", &ts).await.unwrap_err();
         assert!(matches!(err, GateError::Replay(_)));
     }
 
@@ -661,7 +664,11 @@ mod tests {
     // -----------------------------------------------------------------------
 
     fn dummy_peer() -> PeerInfo {
-        PeerInfo { pid: 1, uid: 1000, gid: 1000 }
+        PeerInfo {
+            pid: 1,
+            uid: 1000,
+            gid: 1000,
+        }
     }
 
     #[tokio::test]

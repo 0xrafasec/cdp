@@ -71,9 +71,7 @@ pub async fn write_message<W: AsyncWriteExt + Unpin>(
 /// Read a length-prefixed message asynchronously.
 ///
 /// Returns `VaultError::Protocol` if the declared length exceeds [`MAX_MESSAGE_SIZE`].
-pub async fn read_message<R: AsyncReadExt + Unpin>(
-    reader: &mut R,
-) -> Result<Vec<u8>, VaultError> {
+pub async fn read_message<R: AsyncReadExt + Unpin>(reader: &mut R) -> Result<Vec<u8>, VaultError> {
     let mut len_buf = [0u8; 4];
     reader.read_exact(&mut len_buf).await?;
     let len = u32::from_be_bytes(len_buf) as usize;

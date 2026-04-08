@@ -142,7 +142,8 @@ impl CommandExecutor for BwCliExecutor {
             let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
             return Err(VaultError::BitwardenCli(format!(
                 "bw exited with {}: {}",
-                output.status, stderr.trim()
+                output.status,
+                stderr.trim()
             )));
         }
 
@@ -210,13 +211,14 @@ impl BitwardenBackend {
         let session_str = std::str::from_utf8(session)
             .map_err(|_| VaultError::Locked("session key is not valid UTF-8".to_string()))?;
 
-        let output = self
-            .executor
-            .execute(&["list", "items", "--raw"], None, Some(&[("BW_SESSION", session_str)]))?;
+        let output = self.executor.execute(
+            &["list", "items", "--raw"],
+            None,
+            Some(&[("BW_SESSION", session_str)]),
+        )?;
 
-        let items: Vec<BwItem> = serde_json::from_str(&output).map_err(|e| {
-            VaultError::Protocol(format!("failed to parse bw list output: {e}"))
-        })?;
+        let items: Vec<BwItem> = serde_json::from_str(&output)
+            .map_err(|e| VaultError::Protocol(format!("failed to parse bw list output: {e}")))?;
 
         let refs = items
             .into_iter()
@@ -335,9 +337,9 @@ impl BitwardenBackend {
 
         let cipher = ChaCha20Poly1305::new(key.as_ref().into());
         let nonce = ChaCha20Poly1305::generate_nonce(&mut OsRng);
-        let data = cipher.encrypt(&nonce, plaintext).map_err(|e| {
-            VaultError::Decryption(format!("ChaCha20-Poly1305 encrypt: {e}"))
-        })?;
+        let data = cipher
+            .encrypt(&nonce, plaintext)
+            .map_err(|e| VaultError::Decryption(format!("ChaCha20-Poly1305 encrypt: {e}")))?;
 
         Ok(EncryptedCredential {
             data,
@@ -396,8 +398,7 @@ mod tests {
     }
 
     fn make_backend(responses: Vec<Result<String, VaultError>>) -> BitwardenBackend {
-        let mut backend =
-            BitwardenBackend::new(Box::new(MockCommandExecutor::new(responses)));
+        let mut backend = BitwardenBackend::new(Box::new(MockCommandExecutor::new(responses)));
         backend.set_ipc_key(test_ipc_key());
         backend
     }
@@ -409,7 +410,9 @@ mod tests {
     #[test]
     fn test_unlock_success() {
         let mut backend = make_backend(vec![Ok("session-key-value".to_string())]);
-        backend.unlock("correct-password").expect("unlock should succeed");
+        backend
+            .unlock("correct-password")
+            .expect("unlock should succeed");
         assert!(backend.session_key.is_some());
     }
 
@@ -444,8 +447,7 @@ mod tests {
     #[test]
     fn test_list_credentials() {
         let json = bw_item_login_json("id-1", "My API Key", "secret");
-        let mut backend =
-            make_backend(vec![Ok("session-key".to_string()), Ok(json)]);
+        let mut backend = make_backend(vec![Ok("session-key".to_string()), Ok(json)]);
         backend.unlock("pw").unwrap();
         let creds = backend.list().expect("list should succeed");
         assert_eq!(creds.len(), 1);
@@ -456,8 +458,7 @@ mod tests {
 
     #[test]
     fn test_list_empty() {
-        let mut backend =
-            make_backend(vec![Ok("session-key".to_string()), Ok("[]".to_string())]);
+        let mut backend = make_backend(vec![Ok("session-key".to_string()), Ok("[]".to_string())]);
         backend.unlock("pw").unwrap();
         let creds = backend.list().expect("list should succeed");
         assert!(creds.is_empty());
@@ -494,10 +495,7 @@ mod tests {
     #[test]
     fn test_fetch_login_credential() {
         let item_json = bw_get_item_login_json("id-1", "API Key", "s3cr3t");
-        let mut backend = make_backend(vec![
-            Ok("session-key".to_string()),
-            Ok(item_json),
-        ]);
+        let mut backend = make_backend(vec![Ok("session-key".to_string()), Ok(item_json)]);
         backend.unlock("pw").unwrap();
         let enc = backend.fetch("id-1").expect("fetch should succeed");
 
@@ -511,10 +509,7 @@ mod tests {
     #[test]
     fn test_fetch_notes_credential() {
         let item_json = bw_get_item_note_json("id-2", "Secure Note", "my-secret-note");
-        let mut backend = make_backend(vec![
-            Ok("session-key".to_string()),
-            Ok(item_json),
-        ]);
+        let mut backend = make_backend(vec![Ok("session-key".to_string()), Ok(item_json)]);
         backend.unlock("pw").unwrap();
         let enc = backend.fetch("id-2").expect("fetch should succeed");
 
@@ -547,10 +542,7 @@ mod tests {
     #[test]
     fn test_exists_found() {
         let item_json = bw_get_item_login_json("id-3", "Found", "pw");
-        let mut backend = make_backend(vec![
-            Ok("session-key".to_string()),
-            Ok(item_json),
-        ]);
+        let mut backend = make_backend(vec![Ok("session-key".to_string()), Ok(item_json)]);
         backend.unlock("pw").unwrap();
         assert!(backend.exists("id-3").expect("exists should succeed"));
     }
@@ -564,7 +556,11 @@ mod tests {
             )),
         ]);
         backend.unlock("pw").unwrap();
-        assert!(!backend.exists("nonexistent").expect("exists should return false"));
+        assert!(
+            !backend
+                .exists("nonexistent")
+                .expect("exists should return false")
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -608,7 +604,10 @@ mod tests {
             }]),
         };
         let value = BitwardenBackend::extract_credential_value(&item).unwrap();
-        assert_eq!(value, "note-content", "notes should take priority over fields");
+        assert_eq!(
+            value, "note-content",
+            "notes should take priority over fields"
+        );
     }
 
     #[test]

@@ -42,12 +42,10 @@ impl GateIdentity {
         let verifying_key = signing_key.verifying_key();
 
         // Hash the gate binary itself via /proc/self/exe.
-        let self_exe = std::fs::read_link("/proc/self/exe").map_err(|e| {
-            GateError::Fingerprint(format!("failed to read /proc/self/exe: {e}"))
-        })?;
-        let gate_hash = hash_binary(&self_exe).map_err(|e| {
-            GateError::Fingerprint(format!("failed to hash gate binary: {e}"))
-        })?;
+        let self_exe = std::fs::read_link("/proc/self/exe")
+            .map_err(|e| GateError::Fingerprint(format!("failed to read /proc/self/exe: {e}")))?;
+        let gate_hash = hash_binary(&self_exe)
+            .map_err(|e| GateError::Fingerprint(format!("failed to hash gate binary: {e}")))?;
 
         let fp = GateFingerprintFile {
             gate_pid: std::process::id(),
@@ -60,9 +58,8 @@ impl GateIdentity {
         // Create parent directory with 0700 permissions.
         if let Some(parent) = fingerprint_path.parent() {
             if !parent.exists() {
-                std::fs::create_dir_all(parent).map_err(|e| {
-                    GateError::Fingerprint(format!("failed to create dir: {e}"))
-                })?;
+                std::fs::create_dir_all(parent)
+                    .map_err(|e| GateError::Fingerprint(format!("failed to create dir: {e}")))?;
             }
             use std::os::unix::fs::PermissionsExt;
             std::fs::set_permissions(parent, std::fs::Permissions::from_mode(0o700)).map_err(
@@ -71,9 +68,8 @@ impl GateIdentity {
         }
 
         // Write JSON content.
-        let json = serde_json::to_string_pretty(&fp).map_err(|e| {
-            GateError::Fingerprint(format!("failed to serialize fingerprint: {e}"))
-        })?;
+        let json = serde_json::to_string_pretty(&fp)
+            .map_err(|e| GateError::Fingerprint(format!("failed to serialize fingerprint: {e}")))?;
         std::fs::write(fingerprint_path, json.as_bytes()).map_err(|e| {
             GateError::Fingerprint(format!("failed to write fingerprint file: {e}"))
         })?;
@@ -81,9 +77,7 @@ impl GateIdentity {
         // Set file permissions to 0400 (owner-read-only).
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(fingerprint_path, std::fs::Permissions::from_mode(0o400))
-            .map_err(|e| {
-                GateError::Fingerprint(format!("failed to set file permissions: {e}"))
-            })?;
+            .map_err(|e| GateError::Fingerprint(format!("failed to set file permissions: {e}")))?;
 
         Ok(Self {
             signing_key,
@@ -116,8 +110,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let fp_path = dir.path().join("gate.fingerprint");
 
-        let identity =
-            GateIdentity::create(&fp_path, "/tmp/test.sock").unwrap();
+        let identity = GateIdentity::create(&fp_path, "/tmp/test.sock").unwrap();
 
         // File must exist.
         assert!(fp_path.exists());
@@ -131,10 +124,12 @@ mod tests {
         let contents = std::fs::read_to_string(&fp_path).unwrap();
         let value: serde_json::Value = serde_json::from_str(&contents).unwrap();
         assert_eq!(value["gate_pid"], std::process::id());
-        assert!(value["gate_binary_hash"]
-            .as_str()
-            .unwrap()
-            .starts_with("sha256:"));
+        assert!(
+            value["gate_binary_hash"]
+                .as_str()
+                .unwrap()
+                .starts_with("sha256:")
+        );
         assert_eq!(value["socket_path"], "/tmp/test.sock");
         assert!(value["started_at"].is_string());
 
@@ -153,8 +148,7 @@ mod tests {
     fn cleanup_deletes_file() {
         let dir = tempfile::tempdir().unwrap();
         let fp_path = dir.path().join("gate.fingerprint");
-        let identity =
-            GateIdentity::create(&fp_path, "/tmp/test.sock").unwrap();
+        let identity = GateIdentity::create(&fp_path, "/tmp/test.sock").unwrap();
         assert!(fp_path.exists());
 
         identity.cleanup().unwrap();
@@ -165,8 +159,7 @@ mod tests {
     fn double_cleanup_is_idempotent() {
         let dir = tempfile::tempdir().unwrap();
         let fp_path = dir.path().join("gate.fingerprint");
-        let identity =
-            GateIdentity::create(&fp_path, "/tmp/test.sock").unwrap();
+        let identity = GateIdentity::create(&fp_path, "/tmp/test.sock").unwrap();
 
         identity.cleanup().unwrap();
         identity.cleanup().unwrap(); // should not error

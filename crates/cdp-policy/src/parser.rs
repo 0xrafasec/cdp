@@ -221,14 +221,10 @@ pub struct PolicyDelegation {
 /// An empty directory returns an empty `Vec` without error.
 pub fn load_policies_from_dir(dir: &Path) -> Result<Vec<PolicyEntry>, PolicyError> {
     if !dir.exists() {
-        return Err(PolicyError::DirectoryNotFound(
-            dir.display().to_string(),
-        ));
+        return Err(PolicyError::DirectoryNotFound(dir.display().to_string()));
     }
     if !dir.is_dir() {
-        return Err(PolicyError::DirectoryNotFound(
-            dir.display().to_string(),
-        ));
+        return Err(PolicyError::DirectoryNotFound(dir.display().to_string()));
     }
 
     let mut entries: Vec<PolicyEntry> = Vec::new();
@@ -261,11 +257,10 @@ pub fn load_policies_from_dir(dir: &Path) -> Result<Vec<PolicyEntry>, PolicyErro
             reason: format!("failed to read file: {e}"),
         })?;
 
-        let policy_file: PolicyFile =
-            toml::from_str(&content).map_err(|e| PolicyError::Parse {
-                file: file_name.clone(),
-                reason: e.to_string(),
-            })?;
+        let policy_file: PolicyFile = toml::from_str(&content).map_err(|e| PolicyError::Parse {
+            file: file_name.clone(),
+            reason: e.to_string(),
+        })?;
 
         for entry in policy_file.policies {
             validate_policy(&entry)?;
@@ -377,13 +372,12 @@ pub fn validate_policy(entry: &PolicyEntry) -> Result<(), PolicyError> {
 /// - The hex portion is not valid hexadecimal.
 /// - The decoded length is not exactly 32 bytes.
 pub fn parse_binary_hash(raw: &str) -> Result<[u8; 32], PolicyError> {
-    let hex_str = raw.strip_prefix("sha256:").ok_or_else(|| PolicyError::Parse {
-        file: "<none>".to_string(),
-        reason: format!(
-            "binary hash must start with \"sha256:\", got {:?}",
-            raw
-        ),
-    })?;
+    let hex_str = raw
+        .strip_prefix("sha256:")
+        .ok_or_else(|| PolicyError::Parse {
+            file: "<none>".to_string(),
+            reason: format!("binary hash must start with \"sha256:\", got {:?}", raw),
+        })?;
 
     let bytes = decode_hex(hex_str).ok_or_else(|| PolicyError::Parse {
         file: "<none>".to_string(),
@@ -521,7 +515,10 @@ require_approval_for_delegate = false
 
         let e = &pf.policies[0];
         assert_eq!(e.name, "github-readonly");
-        assert_eq!(e.description, "Allow MCP GitHub server read-only API access");
+        assert_eq!(
+            e.description,
+            "Allow MCP GitHub server read-only API access"
+        );
         assert_eq!(
             e.match_block.agent_binary_hash.as_deref(),
             Some("sha256:abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890")
@@ -532,14 +529,20 @@ require_approval_for_delegate = false
         assert_eq!(allow.hosts, vec!["api.github.com"]);
         assert_eq!(allow.methods, vec!["GET"]);
         assert_eq!(allow.paths, vec!["/repos/**", "/users/**"]);
-        assert_eq!(allow.forbidden_paths, vec!["/repos/*/keys", "/repos/*/hooks"]);
+        assert_eq!(
+            allow.forbidden_paths,
+            vec!["/repos/*/keys", "/repos/*/hooks"]
+        );
         assert_eq!(allow.max_ttl_seconds, Some(3600));
         assert_eq!(allow.max_requests_per_lease, Some(100));
         assert_eq!(allow.max_renewals, Some(3));
         assert_eq!(allow.max_cumulative_ttl_seconds, Some(7200));
         assert!(allow.renewable);
 
-        let bc = allow.body_constraints.as_ref().expect("body_constraints missing");
+        let bc = allow
+            .body_constraints
+            .as_ref()
+            .expect("body_constraints missing");
         assert_eq!(bc.forbidden_fields, vec!["admin", "deploy_key", "delete"]);
         assert_eq!(bc.max_size_bytes, Some(65536));
 
@@ -606,7 +609,13 @@ require_approval_for_delegate = false
     #[test]
     fn auto_approve_with_hash_and_path_is_accepted() {
         let hash = "sha256:abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890";
-        let toml = make_policy_toml("both-auto", "auto", Some(hash), Some("/usr/bin/my-agent"), None);
+        let toml = make_policy_toml(
+            "both-auto",
+            "auto",
+            Some(hash),
+            Some("/usr/bin/my-agent"),
+            None,
+        );
         let pf: PolicyFile = toml::from_str(&toml).expect("TOML parse failed");
         validate_policy(&pf.policies[0]).expect("should pass");
     }
@@ -633,7 +642,10 @@ hosts = ["example.com"]
         assert_eq!(e.description, "");
         assert!(e.allow.renewable, "renewable should default to true");
         assert_eq!(e.approval.mode, "prompt", "mode should default to prompt");
-        assert!(!e.delegation.allowed, "delegation.allowed should default to false");
+        assert!(
+            !e.delegation.allowed,
+            "delegation.allowed should default to false"
+        );
         assert!(e.delegation.max_depth.is_none());
         assert!(!e.delegation.require_approval_for_delegate);
         assert!(e.allow.body_constraints.is_none());
@@ -735,8 +747,8 @@ hosts = ["example.com"]
 
     #[test]
     fn parse_binary_hash_invalid_prefix() {
-        let err = parse_binary_hash("md5:abcdef1234567890abcdef1234567890")
-            .expect_err("should fail");
+        let err =
+            parse_binary_hash("md5:abcdef1234567890abcdef1234567890").expect_err("should fail");
         assert!(
             matches!(&err, PolicyError::Parse { reason, .. } if reason.contains("sha256:")),
             "unexpected error: {err}"
@@ -750,8 +762,8 @@ hosts = ["example.com"]
     #[test]
     fn parse_binary_hash_wrong_length() {
         // Only 16 bytes (32 hex chars) instead of 32 bytes.
-        let err = parse_binary_hash("sha256:abcdef1234567890abcdef1234567890")
-            .expect_err("should fail");
+        let err =
+            parse_binary_hash("sha256:abcdef1234567890abcdef1234567890").expect_err("should fail");
         assert!(
             matches!(&err, PolicyError::Parse { reason, .. } if reason.contains("32 bytes")),
             "unexpected error: {err}"
@@ -1012,7 +1024,10 @@ max_renewals = 10
 "#;
         let pf: PolicyFile = toml::from_str(toml).expect("TOML parse failed");
         let err = validate_policy(&pf.policies[0]).unwrap_err();
-        assert!(err.to_string().contains("exceeds protocol maximum of 3"), "{err}");
+        assert!(
+            err.to_string().contains("exceeds protocol maximum of 3"),
+            "{err}"
+        );
     }
 
     // -----------------------------------------------------------------------

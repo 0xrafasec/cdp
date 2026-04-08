@@ -25,8 +25,8 @@ pub mod watcher;
 pub use error::PolicyError;
 pub use evaluator::PolicyEvaluator;
 pub use parser::{
-    load_policies_from_dir, validate_policy, PolicyAllow, PolicyApproval, PolicyDelegation,
-    PolicyEntry, PolicyFile, PolicyMatch,
+    PolicyAllow, PolicyApproval, PolicyDelegation, PolicyEntry, PolicyFile, PolicyMatch,
+    load_policies_from_dir, validate_policy,
 };
 pub use types::{
     AgentInfo, ApprovalConfig, ApprovalResult, BodyConstraints, NetworkConstraints,
@@ -61,10 +61,7 @@ impl PolicyEngine {
     /// If the directory does not exist it is created (matching the Gate's
     /// first-run experience). If the directory is empty, the engine starts
     /// with an empty policy set (every request will be denied).
-    pub fn new(
-        policy_dir: PathBuf,
-        approval_config: ApprovalConfig,
-    ) -> Result<Self, PolicyError> {
+    pub fn new(policy_dir: PathBuf, approval_config: ApprovalConfig) -> Result<Self, PolicyError> {
         if !policy_dir.exists() {
             std::fs::create_dir_all(&policy_dir).map_err(|e| {
                 PolicyError::Io(std::io::Error::new(

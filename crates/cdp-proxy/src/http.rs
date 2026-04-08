@@ -22,8 +22,8 @@ use zeroize::Zeroizing;
 use cdp_audit::{AuditEventType, AuditFields};
 use cdp_lease::{LeaseId, LeaseManager};
 
-use crate::credential::CredentialProvider;
 use crate::ProxyError;
+use crate::credential::CredentialProvider;
 
 // ---------------------------------------------------------------------------
 // Body-size limit for buffering inbound request bodies.
@@ -248,11 +248,7 @@ async fn handle_request_inner(
             lease_manager.use_lease(&lease_id).await?
         }
         Err(e) => {
-            emit_blocked(
-                &audit_tx,
-                &lease_id,
-                format!("auth failed: {e}"),
-            );
+            emit_blocked(&audit_tx, &lease_id, format!("auth failed: {e}"));
             return Err(e);
         }
     };
@@ -260,9 +256,8 @@ async fn handle_request_inner(
     // -----------------------------------------------------------------------
     // 3. Extract Host and path for scope / DNS checks.
     // -----------------------------------------------------------------------
-    let host = extract_host(&parts.headers, &parts.uri).ok_or_else(|| {
-        ProxyError::ScopeViolation("missing Host header".to_string())
-    })?;
+    let host = extract_host(&parts.headers, &parts.uri)
+        .ok_or_else(|| ProxyError::ScopeViolation("missing Host header".to_string()))?;
 
     let _path = parts.uri.path_and_query().map_or("/", |pq| pq.as_str());
     let content_type = parts
@@ -285,11 +280,7 @@ async fn handle_request_inner(
         },
         &lease.granted_scope,
     ) {
-        emit_blocked(
-            &audit_tx,
-            &lease_id,
-            format!("scope violation: {e}"),
-        );
+        emit_blocked(&audit_tx, &lease_id, format!("scope violation: {e}"));
         return Err(e);
     }
 
@@ -299,11 +290,7 @@ async fn handle_request_inner(
     let pinned_ips = match crate::dns::resolve_and_verify(&lease, &host).await {
         Ok(ips) => ips,
         Err(e) => {
-            emit_blocked(
-                &audit_tx,
-                &lease_id,
-                format!("dns_rebinding_detected: {e}"),
-            );
+            emit_blocked(&audit_tx, &lease_id, format!("dns_rebinding_detected: {e}"));
             return Err(e);
         }
     };
@@ -441,7 +428,10 @@ async fn execute_with_redirects(
         )?;
 
         match redirect_action {
-            crate::redirect::RedirectAction::Follow { location, host: new_host } => {
+            crate::redirect::RedirectAction::Follow {
+                location,
+                host: new_host,
+            } => {
                 if hops >= MAX_REDIRECT_HOPS {
                     return Err(ProxyError::RedirectBlocked(format!(
                         "too many redirects (max {MAX_REDIRECT_HOPS})"
@@ -450,7 +440,8 @@ async fn execute_with_redirects(
                 hops += 1;
 
                 // Re-verify DNS pin for the new host.
-                let new_pinned = crate::dns::resolve_and_verify(lease, &new_host).await
+                let new_pinned = crate::dns::resolve_and_verify(lease, &new_host)
+                    .await
                     .map_err(|e| {
                         emit_blocked(
                             audit_tx,
@@ -485,10 +476,7 @@ async fn execute_with_redirects(
                 let resp_bytes = collected.to_bytes();
 
                 // Build a mutable response to apply sanitisation.
-                let mut response = hyper::Response::from_parts(
-                    resp_parts,
-                    Full::new(resp_bytes),
-                );
+                let mut response = hyper::Response::from_parts(resp_parts, Full::new(resp_bytes));
 
                 crate::sanitizer::sanitize_response(&mut response);
 
@@ -511,16 +499,13 @@ pub fn inject_headers(
     headers: &[crate::credential::CredentialHeader],
 ) -> Result<http::request::Builder, ProxyError> {
     for h in headers {
-        let name = http::header::HeaderName::from_bytes(h.name.as_bytes())
-            .map_err(|e| ProxyError::CredentialInjection(format!("invalid header name {:?}: {e}", h.name)))?;
+        let name = http::header::HeaderName::from_bytes(h.name.as_bytes()).map_err(|e| {
+            ProxyError::CredentialInjection(format!("invalid header name {:?}: {e}", h.name))
+        })?;
 
-        let value = http::header::HeaderValue::from_bytes(h.value.as_ref())
-            .map_err(|e| {
-                ProxyError::CredentialInjection(format!(
-                    "invalid header value for {:?}: {e}",
-                    h.name
-                ))
-            })?;
+        let value = http::header::HeaderValue::from_bytes(h.value.as_ref()).map_err(|e| {
+            ProxyError::CredentialInjection(format!("invalid header value for {:?}: {e}", h.name))
+        })?;
 
         builder = builder.header(name, value);
     }
@@ -549,10 +534,7 @@ pub fn strip_proxy_internal_headers(headers: &mut http::HeaderMap) {
 /// Buffer an inbound request body up to `max_bytes`.
 ///
 /// Returns [`ProxyError::BodyTooLarge`] if the body exceeds the limit.
-async fn collect_body(
-    body: Incoming,
-    max_bytes: u64,
-) -> Result<Vec<u8>, ProxyError> {
+async fn collect_body(body: Incoming, max_bytes: u64) -> Result<Vec<u8>, ProxyError> {
     let collected = body
         .collect()
         .await
@@ -623,19 +605,31 @@ fn proxy_error_to_response(err: ProxyError) -> hyper::Response<Full<Bytes>> {
     let (status, body) = match &err {
         ProxyError::AuthFailed(_) => {
             tracing::warn!(error = %err, "proxy auth failed");
-            (http::StatusCode::FORBIDDEN, "403 Forbidden: authentication failed")
+            (
+                http::StatusCode::FORBIDDEN,
+                "403 Forbidden: authentication failed",
+            )
         }
         ProxyError::ScopeViolation(_) => {
             tracing::warn!(error = %err, "proxy scope violation");
-            (http::StatusCode::FORBIDDEN, "403 Forbidden: scope violation")
+            (
+                http::StatusCode::FORBIDDEN,
+                "403 Forbidden: scope violation",
+            )
         }
         ProxyError::DnsPinMismatch { .. } => {
             tracing::warn!(error = %err, "DNS pin mismatch");
-            (http::StatusCode::FORBIDDEN, "403 Forbidden: dns_rebinding_detected")
+            (
+                http::StatusCode::FORBIDDEN,
+                "403 Forbidden: dns_rebinding_detected",
+            )
         }
         ProxyError::RedirectBlocked(_) => {
             tracing::warn!(error = %err, "redirect blocked");
-            (http::StatusCode::FORBIDDEN, "403 Forbidden: redirect blocked")
+            (
+                http::StatusCode::FORBIDDEN,
+                "403 Forbidden: redirect blocked",
+            )
         }
         ProxyError::BodyTooLarge { .. } => {
             tracing::warn!(error = %err, "body too large");
@@ -643,17 +637,26 @@ fn proxy_error_to_response(err: ProxyError) -> hyper::Response<Full<Bytes>> {
         }
         ProxyError::ForbiddenField(_) => {
             tracing::warn!(error = %err, "forbidden field in body");
-            (http::StatusCode::FORBIDDEN, "403 Forbidden: scope violation")
+            (
+                http::StatusCode::FORBIDDEN,
+                "403 Forbidden: scope violation",
+            )
         }
         ProxyError::ContentTypeNotAllowed(_) => {
             tracing::warn!(error = %err, "content type not allowed");
-            (http::StatusCode::FORBIDDEN, "403 Forbidden: scope violation")
+            (
+                http::StatusCode::FORBIDDEN,
+                "403 Forbidden: scope violation",
+            )
         }
         ProxyError::Lease(cdp_lease::LeaseError::NotFound(_))
         | ProxyError::Lease(cdp_lease::LeaseError::Expired(_))
         | ProxyError::Lease(cdp_lease::LeaseError::Revoked(_)) => {
             tracing::warn!(error = %err, "lease not usable");
-            (http::StatusCode::FORBIDDEN, "403 Forbidden: lease not valid")
+            (
+                http::StatusCode::FORBIDDEN,
+                "403 Forbidden: lease not valid",
+            )
         }
         _ => {
             tracing::error!(error = %err, "proxy upstream error");
@@ -666,9 +669,7 @@ fn proxy_error_to_response(err: ProxyError) -> hyper::Response<Full<Bytes>> {
         .status(status)
         .header(http::header::CONTENT_TYPE, "text/plain; charset=utf-8")
         .body(Full::new(body_bytes))
-        .unwrap_or_else(|_| {
-            hyper::Response::new(Full::new(Bytes::from_static(b"502 Bad Gateway")))
-        })
+        .unwrap_or_else(|_| hyper::Response::new(Full::new(Bytes::from_static(b"502 Bad Gateway"))))
 }
 
 // ---------------------------------------------------------------------------
@@ -678,8 +679,8 @@ fn proxy_error_to_response(err: ProxyError) -> hyper::Response<Full<Bytes>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cdp_crypto::SecureBuffer;
     use crate::credential::CredentialHeader;
+    use cdp_crypto::SecureBuffer;
 
     #[test]
     fn test_inject_headers_adds_header() {
@@ -693,7 +694,9 @@ mod tests {
         let builder = inject_headers(builder, &headers).expect("inject must succeed");
         let req = builder.body(()).expect("build must succeed");
         assert_eq!(
-            req.headers().get("authorization").and_then(|v| v.to_str().ok()),
+            req.headers()
+                .get("authorization")
+                .and_then(|v| v.to_str().ok()),
             Some("Bearer token123")
         );
     }
@@ -802,10 +805,10 @@ mod tests {
         // Full<Bytes> stores data internally; access via the frame API.
         use http_body_util::BodyExt;
         // Collect synchronously since Full<Bytes> is immediately ready.
-        let rt = tokio::runtime::Builder::new_current_thread().build().expect("rt");
-        let collected = rt.block_on(async {
-            resp.into_body().collect().await.expect("collect")
-        });
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .expect("rt");
+        let collected = rt.block_on(async { resp.into_body().collect().await.expect("collect") });
         String::from_utf8_lossy(&collected.to_bytes()).to_string()
     }
 
@@ -816,12 +819,18 @@ mod tests {
         assert_eq!(resp.status(), http::StatusCode::FORBIDDEN);
         // Error body must NOT contain the internal message (L-2 fix).
         let body = response_body_string(resp);
-        assert!(!body.contains("bad token"), "internal details must not leak to agent");
+        assert!(
+            !body.contains("bad token"),
+            "internal details must not leak to agent"
+        );
     }
 
     #[test]
     fn test_proxy_error_to_response_body_too_large() {
-        let err = ProxyError::BodyTooLarge { size: 100, limit: 50 };
+        let err = ProxyError::BodyTooLarge {
+            size: 100,
+            limit: 50,
+        };
         let resp = proxy_error_to_response(err);
         assert_eq!(resp.status(), http::StatusCode::PAYLOAD_TOO_LARGE);
     }
@@ -837,7 +846,10 @@ mod tests {
         assert_eq!(resp.status(), http::StatusCode::FORBIDDEN);
         // Must not leak the internal IP or host details.
         let body = response_body_string(resp);
-        assert!(!body.contains("evil.example.com"), "internal host must not leak");
+        assert!(
+            !body.contains("evil.example.com"),
+            "internal host must not leak"
+        );
         assert!(!body.contains("1.2.3.4"), "internal IP must not leak");
     }
 
@@ -847,6 +859,9 @@ mod tests {
         let resp = proxy_error_to_response(err);
         assert_eq!(resp.status(), http::StatusCode::BAD_GATEWAY);
         let body = response_body_string(resp);
-        assert!(!body.contains("connection refused"), "upstream error details must not leak");
+        assert!(
+            !body.contains("connection refused"),
+            "upstream error details must not leak"
+        );
     }
 }

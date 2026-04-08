@@ -414,11 +414,7 @@ mod tests {
     // Test helpers
     // -----------------------------------------------------------------------
 
-    fn make_agent(
-        binary_path: &str,
-        binary_hash: [u8; 32],
-        agent_id: Option<&str>,
-    ) -> AgentInfo {
+    fn make_agent(binary_path: &str, binary_hash: [u8; 32], agent_id: Option<&str>) -> AgentInfo {
         AgentInfo {
             uid: 1000,
             pid: 42,
@@ -444,11 +440,7 @@ mod tests {
         format!("sha256:{}", hex_encode(&[b; 32]))
     }
 
-    fn make_allow(
-        hosts: Vec<&str>,
-        methods: Vec<&str>,
-        paths: Vec<&str>,
-    ) -> PolicyAllow {
+    fn make_allow(hosts: Vec<&str>, methods: Vec<&str>, paths: Vec<&str>) -> PolicyAllow {
         PolicyAllow {
             hosts: hosts.iter().map(|s| s.to_string()).collect(),
             methods: methods.iter().map(|s| s.to_string()).collect(),
@@ -533,7 +525,10 @@ mod tests {
 
         match decision {
             PolicyDecision::AutoApprove { policy_name, .. } => {
-                assert_eq!(policy_name, "hash-policy", "hash tier should win over path tier");
+                assert_eq!(
+                    policy_name, "hash-policy",
+                    "hash tier should win over path tier"
+                );
             }
             other => panic!("expected AutoApprove, got {:?}", other),
         }
@@ -583,7 +578,10 @@ mod tests {
 
         match decision {
             PolicyDecision::AutoApprove { policy_name, .. } => {
-                assert_eq!(policy_name, "path-policy", "path tier should win over id tier");
+                assert_eq!(
+                    policy_name, "path-policy",
+                    "path tier should win over id tier"
+                );
             }
             other => panic!("expected AutoApprove, got {:?}", other),
         }
@@ -679,15 +677,14 @@ mod tests {
     // -----------------------------------------------------------------------
     #[test]
     fn scope_intersection_hosts_both_nonempty() {
-        let mut allow = make_allow(
-            vec!["api.example.com", "cdn.example.com"],
-            vec![],
-            vec![],
-        );
+        let mut allow = make_allow(vec!["api.example.com", "cdn.example.com"], vec![], vec![]);
         allow.hosts = vec!["api.example.com".to_string(), "cdn.example.com".to_string()];
 
         let requested = Scope {
-            hosts: vec!["api.example.com".to_string(), "other.example.com".to_string()],
+            hosts: vec![
+                "api.example.com".to_string(),
+                "other.example.com".to_string(),
+            ],
             ..Default::default()
         };
         let result = intersect_scope(&requested, &allow).expect("should not be empty");
@@ -782,8 +779,16 @@ mod tests {
         let result = intersect_scope(&requested, &allow).expect("should produce scope");
 
         // Both forbidden patterns should be in the result's forbidden list.
-        assert!(result.forbidden_paths.contains(&"/api/internal/**".to_string()));
-        assert!(result.forbidden_paths.contains(&"/api/secret/**".to_string()));
+        assert!(
+            result
+                .forbidden_paths
+                .contains(&"/api/internal/**".to_string())
+        );
+        assert!(
+            result
+                .forbidden_paths
+                .contains(&"/api/secret/**".to_string())
+        );
 
         // Paths matching either forbidden pattern must be excluded.
         assert!(result.paths.contains(&"/api/v1".to_string()));
@@ -921,7 +926,11 @@ mod tests {
         let decision = evaluator.evaluate(&agent, "cred", &requested);
         match decision {
             PolicyDecision::Denied { reason } => {
-                assert!(reason.contains("scope intersection is empty"), "got: {}", reason);
+                assert!(
+                    reason.contains("scope intersection is empty"),
+                    "got: {}",
+                    reason
+                );
             }
             other => panic!("expected Denied, got {:?}", other),
         }
@@ -939,9 +948,15 @@ mod tests {
         d[31] = 0x00; // last byte differs
 
         assert!(constant_time_eq(&a, &b), "identical arrays must be equal");
-        assert!(!constant_time_eq(&a, &c), "different arrays must not be equal");
+        assert!(
+            !constant_time_eq(&a, &c),
+            "different arrays must not be equal"
+        );
         assert!(!constant_time_eq(&a, &d), "off-by-one must not be equal");
-        assert!(!constant_time_eq(&a, &a[..16]), "different lengths must not be equal");
+        assert!(
+            !constant_time_eq(&a, &a[..16]),
+            "different lengths must not be equal"
+        );
         assert!(constant_time_eq(&[], &[]), "empty slices are equal");
     }
 
@@ -968,7 +983,11 @@ mod tests {
         assert!(merged.forbidden_fields.contains(&"password".to_string()));
         assert!(merged.forbidden_fields.contains(&"secret".to_string()));
         assert_eq!(
-            merged.forbidden_fields.iter().filter(|f| *f == "password").count(),
+            merged
+                .forbidden_fields
+                .iter()
+                .filter(|f| *f == "password")
+                .count(),
             1,
             "duplicates should be removed"
         );
@@ -977,7 +996,11 @@ mod tests {
         assert_eq!(merged.max_size_bytes, Some(32768));
 
         // Policy's content types win when non-empty.
-        assert!(merged.allowed_content_types.contains(&"text/plain".to_string()));
+        assert!(
+            merged
+                .allowed_content_types
+                .contains(&"text/plain".to_string())
+        );
     }
 
     #[test]
@@ -1035,7 +1058,10 @@ mod tests {
         let result = intersect_scope(&requested, &allow).unwrap();
         let nc = result.network.expect("network should be set");
         assert!(!nc.follow_redirects, "policy's follow_redirects should win");
-        assert_eq!(nc.dns_resolution, "pinned", "policy's dns_resolution should win");
+        assert_eq!(
+            nc.dns_resolution, "pinned",
+            "policy's dns_resolution should win"
+        );
         assert_eq!(nc.allowed_ip_ranges, vec!["10.0.0.0/8"]);
     }
 
@@ -1052,7 +1078,9 @@ mod tests {
             ..Default::default()
         };
         let result = intersect_scope(&requested, &allow).unwrap();
-        let nc = result.network.expect("network should be set from requested");
+        let nc = result
+            .network
+            .expect("network should be set from requested");
         assert!(nc.follow_redirects);
         assert_eq!(nc.dns_resolution, "system");
     }

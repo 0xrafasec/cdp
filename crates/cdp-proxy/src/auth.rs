@@ -46,10 +46,9 @@ pub async fn authenticate(
     let token_str = extract_header(headers, HEADER_LEASE_TOKEN)
         .ok_or_else(|| ProxyError::AuthFailed("missing X-CDP-Lease-Token header".to_string()))?;
 
-    let cb_hex = extract_header(headers, HEADER_CHANNEL_BINDING)
-        .ok_or_else(|| {
-            ProxyError::AuthFailed("missing X-CDP-Channel-Binding header".to_string())
-        })?;
+    let cb_hex = extract_header(headers, HEADER_CHANNEL_BINDING).ok_or_else(|| {
+        ProxyError::AuthFailed("missing X-CDP-Channel-Binding header".to_string())
+    })?;
 
     // 2. Decode channel binding nonce from hex.
     let cb_bytes = hex_to_bytes(cb_hex).ok_or_else(|| {
@@ -64,7 +63,9 @@ pub async fn authenticate(
         &lease.channel_binding_nonce,
         token_str,
     ) {
-        return Err(ProxyError::AuthFailed("lease token verification failed".to_string()));
+        return Err(ProxyError::AuthFailed(
+            "lease token verification failed".to_string(),
+        ));
     }
 
     // 4. Verify channel binding (constant-time XOR comparison).
@@ -172,9 +173,8 @@ pub fn parse_proc_net_tcp(content: &str, target_addr: SocketAddr) -> Result<u64,
 pub fn find_pid_for_inode(target_inode: u64) -> Result<u32, ProxyError> {
     let target_link = format!("socket:[{target_inode}]");
 
-    let proc_dir = std::fs::read_dir("/proc").map_err(|e| {
-        ProxyError::AuthFailed(format!("cannot read /proc: {e}"))
-    })?;
+    let proc_dir = std::fs::read_dir("/proc")
+        .map_err(|e| ProxyError::AuthFailed(format!("cannot read /proc: {e}")))?;
 
     for entry in proc_dir.flatten() {
         // Only examine numeric directories (PIDs).
@@ -214,9 +214,8 @@ pub fn find_pid_for_inode(target_inode: u64) -> Result<u32, ProxyError> {
 /// (second field) since that is what `SO_PEERCRED` returns.
 pub fn read_uid_for_pid(pid: u32) -> Result<u32, ProxyError> {
     let status_path = format!("/proc/{pid}/status");
-    let content = std::fs::read_to_string(&status_path).map_err(|e| {
-        ProxyError::AuthFailed(format!("cannot read {status_path}: {e}"))
-    })?;
+    let content = std::fs::read_to_string(&status_path)
+        .map_err(|e| ProxyError::AuthFailed(format!("cannot read {status_path}: {e}")))?;
 
     for line in content.lines() {
         if let Some(rest) = line.strip_prefix("Uid:") {
@@ -228,9 +227,7 @@ pub fn read_uid_for_pid(pid: u32) -> Result<u32, ProxyError> {
                 )));
             }
             let uid = fields[1].parse::<u32>().map_err(|_| {
-                ProxyError::AuthFailed(format!(
-                    "cannot parse effective UID from {status_path}"
-                ))
+                ProxyError::AuthFailed(format!("cannot parse effective UID from {status_path}"))
             })?;
             return Ok(uid);
         }
@@ -247,9 +244,7 @@ pub fn read_uid_for_pid(pid: u32) -> Result<u32, ProxyError> {
 
 /// Extract a header value as a `&str`, returning `None` on missing or non-ASCII.
 fn extract_header<'a>(headers: &'a http::HeaderMap, name: &str) -> Option<&'a str> {
-    headers
-        .get(name)
-        .and_then(|v| v.to_str().ok())
+    headers.get(name).and_then(|v| v.to_str().ok())
 }
 
 /// Decode a lowercase/uppercase hex string to bytes.  Returns `None` on error.
@@ -327,8 +322,7 @@ mod tests {
     #[test]
     fn test_parse_proc_net_tcp_no_match() {
         let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 9999);
-        let err = parse_proc_net_tcp(SAMPLE_TCP, addr)
-            .expect_err("no match must return error");
+        let err = parse_proc_net_tcp(SAMPLE_TCP, addr).expect_err("no match must return error");
         assert!(matches!(err, ProxyError::AuthFailed(_)));
     }
 
@@ -343,8 +337,7 @@ mod tests {
     #[test]
     fn test_parse_proc_net_tcp_ipv6_fails() {
         let addr: SocketAddr = "[::1]:8080".parse().expect("valid addr");
-        let err = parse_proc_net_tcp(SAMPLE_TCP, addr)
-            .expect_err("IPv6 should fail");
+        let err = parse_proc_net_tcp(SAMPLE_TCP, addr).expect_err("IPv6 should fail");
         assert!(matches!(err, ProxyError::AuthFailed(_)));
     }
 
@@ -387,7 +380,10 @@ mod tests {
             .expect_err("missing header must fail");
         assert!(matches!(err, ProxyError::AuthFailed(_)));
         let msg = err.to_string();
-        assert!(msg.contains("X-CDP-Lease-Token"), "error must name the missing header");
+        assert!(
+            msg.contains("X-CDP-Lease-Token"),
+            "error must name the missing header"
+        );
     }
 
     #[tokio::test]

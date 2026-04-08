@@ -56,9 +56,8 @@ pub async fn prompt_user(
     let gui_cmd = if !config.gui_command.is_empty() {
         config.gui_command.clone()
     } else {
-        detect_gui_command().ok_or_else(|| {
-            PolicyError::ApprovalCommand("no GUI approval tool found".into())
-        })?
+        detect_gui_command()
+            .ok_or_else(|| PolicyError::ApprovalCommand("no GUI approval tool found".into()))?
     };
 
     run_gui_approval(&gui_cmd, &message, config.timeout_seconds).await
@@ -274,10 +273,7 @@ async fn run_gui_approval(
 //   Exit 1  → No     → Deny
 //   Exit 2  → Cancel → AllowTimed { duration_seconds: 600 }
 
-async fn run_kdialog(
-    gui_cmd: &str,
-    message: &str,
-) -> Result<ApprovalResult, PolicyError> {
+async fn run_kdialog(gui_cmd: &str, message: &str) -> Result<ApprovalResult, PolicyError> {
     let mut child = Command::new(gui_cmd)
         .arg("--warningyesnocancel")
         .arg(message)
@@ -296,7 +292,9 @@ async fn run_kdialog(
     match status.code() {
         Some(0) => Ok(ApprovalResult::AllowOnce),
         Some(1) => Ok(ApprovalResult::Deny),
-        Some(2) => Ok(ApprovalResult::AllowTimed { duration_seconds: 600 }),
+        Some(2) => Ok(ApprovalResult::AllowTimed {
+            duration_seconds: 600,
+        }),
         Some(code) => Err(PolicyError::ApprovalCommand(format!(
             "kdialog exited with unexpected code {code}"
         ))),
@@ -316,10 +314,7 @@ async fn run_kdialog(
 //   Exit non-0, stdout "Allow 10min" → AllowTimed { 600 }
 //   Otherwise                     → Deny
 
-async fn run_zenity(
-    gui_cmd: &str,
-    message: &str,
-) -> Result<ApprovalResult, PolicyError> {
+async fn run_zenity(gui_cmd: &str, message: &str) -> Result<ApprovalResult, PolicyError> {
     let mut child = Command::new(gui_cmd)
         .arg("--question")
         .arg("--no-markup")
@@ -349,7 +344,9 @@ async fn run_zenity(
     if status.code() == Some(0) {
         Ok(ApprovalResult::AllowOnce)
     } else if stdout_text.contains("Allow 10min") {
-        Ok(ApprovalResult::AllowTimed { duration_seconds: 600 })
+        Ok(ApprovalResult::AllowTimed {
+            duration_seconds: 600,
+        })
     } else {
         Ok(ApprovalResult::Deny)
     }
@@ -365,10 +362,7 @@ async fn run_zenity(
 //   stdout contains "Allow 10min" → AllowTimed { 600 }
 //   Otherwise                     → Deny
 
-async fn run_osascript(
-    gui_cmd: &str,
-    message: &str,
-) -> Result<ApprovalResult, PolicyError> {
+async fn run_osascript(gui_cmd: &str, message: &str) -> Result<ApprovalResult, PolicyError> {
     // Escape for AppleScript double-quoted strings: backslashes and double
     // quotes must be escaped.  The message may contain agent-provided content
     // (the "reason" field) which is explicitly untrusted — embedding it in a
@@ -393,12 +387,9 @@ async fn run_osascript(
 
     let mut stdout_text = String::new();
     if let Some(mut stdout) = child.stdout.take() {
-        stdout
-            .read_to_string(&mut stdout_text)
-            .await
-            .map_err(|e| {
-                PolicyError::ApprovalCommand(format!("osascript stdout read error: {e}"))
-            })?;
+        stdout.read_to_string(&mut stdout_text).await.map_err(|e| {
+            PolicyError::ApprovalCommand(format!("osascript stdout read error: {e}"))
+        })?;
     }
 
     // osascript returns something like: "button returned:Allow Once"
@@ -410,7 +401,9 @@ async fn run_osascript(
     if stdout_text.contains("Allow Once") {
         Ok(ApprovalResult::AllowOnce)
     } else if stdout_text.contains("Allow 10min") {
-        Ok(ApprovalResult::AllowTimed { duration_seconds: 600 })
+        Ok(ApprovalResult::AllowTimed {
+            duration_seconds: 600,
+        })
     } else {
         Ok(ApprovalResult::Deny)
     }
@@ -511,8 +504,7 @@ mod tests {
         let scope = make_scope();
         let config = make_config(false, true);
 
-        let msg =
-            format_approval_message(&agent, "github_api", &scope, "some reason", &config);
+        let msg = format_approval_message(&agent, "github_api", &scope, "some reason", &config);
 
         assert!(!msg.contains("Binary Hash:"), "hash line should be absent");
         assert!(msg.contains("Agent:"));
@@ -530,8 +522,14 @@ mod tests {
 
         let msg = format_approval_message(&agent, "github_api", &scope, "my reason", &config);
 
-        assert!(!msg.contains("(UNVERIFIED)"), "should not label as UNVERIFIED");
-        assert!(msg.contains("Agent-provided reason"), "should contain reason label");
+        assert!(
+            !msg.contains("(UNVERIFIED)"),
+            "should not label as UNVERIFIED"
+        );
+        assert!(
+            msg.contains("Agent-provided reason"),
+            "should contain reason label"
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -562,7 +560,10 @@ mod tests {
             char_count <= 20,
             "reason line has {char_count} chars, expected ≤ 20: {reason_line:?}"
         );
-        assert!(reason_line.ends_with("..."), "truncated reason should end with '...'");
+        assert!(
+            reason_line.ends_with("..."),
+            "truncated reason should end with '...'"
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -583,7 +584,10 @@ mod tests {
         };
 
         let summary = format_scope_summary(&scope);
-        assert!(summary.contains("GET, POST"), "methods should be comma-joined");
+        assert!(
+            summary.contains("GET, POST"),
+            "methods should be comma-joined"
+        );
         assert!(summary.contains("api.example.com"), "should contain host");
         assert!(summary.contains("/repos/**"), "should contain paths");
     }
@@ -608,7 +612,10 @@ mod tests {
         };
 
         let summary = format_scope_summary(&scope);
-        assert!(summary.contains("+2 more"), "should show '+2 more' for 5 paths");
+        assert!(
+            summary.contains("+2 more"),
+            "should show '+2 more' for 5 paths"
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -621,12 +628,17 @@ mod tests {
         let scope = Scope::default();
         let config = make_config(false, false);
 
-        let msg =
-            format_approval_message(&agent, "some_cred", &scope, "reason", &config);
+        let msg = format_approval_message(&agent, "some_cred", &scope, "reason", &config);
 
         // No Scope: or Duration: lines when scope is empty.
-        assert!(!msg.contains("Scope:"), "empty scope should omit Scope line");
-        assert!(!msg.contains("Duration:"), "empty scope should omit Duration line");
+        assert!(
+            !msg.contains("Scope:"),
+            "empty scope should omit Scope line"
+        );
+        assert!(
+            !msg.contains("Duration:"),
+            "empty scope should omit Duration line"
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -690,10 +702,11 @@ mod tests {
     #[test]
     fn binary_hash_shows_first_16_hex_chars() {
         let agent = AgentInfo {
-            binary_hash: [0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0,
-                          0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
-                          0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00,
-                          0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08],
+            binary_hash: [
+                0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66,
+                0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00, 0x01, 0x02, 0x03, 0x04,
+                0x05, 0x06, 0x07, 0x08,
+            ],
             uid: 0,
             pid: 1,
             binary_path: PathBuf::from("/bin/agent"),

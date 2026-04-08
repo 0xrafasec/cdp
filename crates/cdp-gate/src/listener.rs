@@ -24,7 +24,11 @@ impl GateListener {
         match std::fs::remove_file(socket_path) {
             Ok(()) => {}
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-            Err(e) => return Err(GateError::Listener(format!("failed to remove stale socket: {e}"))),
+            Err(e) => {
+                return Err(GateError::Listener(format!(
+                    "failed to remove stale socket: {e}"
+                )));
+            }
         }
 
         // Create parent directory with 0700 permissions if it doesn't exist.
@@ -36,15 +40,17 @@ impl GateListener {
             })?;
             // Set 0700 permissions on the newly created directory.
             use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(parent, std::fs::Permissions::from_mode(0o700))
-                .map_err(|e| {
-                    GateError::Listener(format!("failed to set directory permissions: {e}"))
-                })?;
+            std::fs::set_permissions(parent, std::fs::Permissions::from_mode(0o700)).map_err(
+                |e| GateError::Listener(format!("failed to set directory permissions: {e}")),
+            )?;
         }
 
         // Bind the Unix listener.
         let listener = UnixListener::bind(socket_path).map_err(|e| {
-            GateError::Listener(format!("failed to bind socket at {}: {e}", socket_path.display()))
+            GateError::Listener(format!(
+                "failed to bind socket at {}: {e}",
+                socket_path.display()
+            ))
         })?;
 
         // Set socket file permissions to 0660.
@@ -60,9 +66,11 @@ impl GateListener {
 
     /// Accept a connection and extract `SO_PEERCRED`.
     pub async fn accept(&self) -> Result<(UnixStream, PeerInfo), GateError> {
-        let (stream, _addr) = self.listener.accept().await.map_err(|e| {
-            GateError::Listener(format!("accept failed: {e}"))
-        })?;
+        let (stream, _addr) = self
+            .listener
+            .accept()
+            .await
+            .map_err(|e| GateError::Listener(format!("accept failed: {e}")))?;
 
         let peer = extract_peer_info(&stream)?;
         Ok((stream, peer))
@@ -81,9 +89,8 @@ fn extract_peer_info(stream: &UnixStream) -> Result<PeerInfo, GateError> {
 
     // SAFETY: stream is valid for the duration of this call.
     let borrowed = unsafe { BorrowedFd::borrow_raw(stream.as_raw_fd()) };
-    let creds = getsockopt(&borrowed, PeerCredentials).map_err(|e| {
-        GateError::Syscall(format!("getsockopt(SO_PEERCRED) failed: {e}"))
-    })?;
+    let creds = getsockopt(&borrowed, PeerCredentials)
+        .map_err(|e| GateError::Syscall(format!("getsockopt(SO_PEERCRED) failed: {e}")))?;
 
     Ok(PeerInfo {
         pid: creds.pid() as u32,
@@ -135,9 +142,8 @@ mod tests {
 
         // Connect from the current process.
         let sock_path = sock.clone();
-        let client_handle = tokio::spawn(async move {
-            tokio::net::UnixStream::connect(&sock_path).await.unwrap()
-        });
+        let client_handle =
+            tokio::spawn(async move { tokio::net::UnixStream::connect(&sock_path).await.unwrap() });
 
         let (_, peer) = listener.accept().await.unwrap();
         let _client = client_handle.await.unwrap();

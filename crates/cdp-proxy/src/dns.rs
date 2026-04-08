@@ -23,11 +23,7 @@ use crate::ProxyError;
 /// Returns [`ProxyError::DnsPinMismatch`] when the resolved IP is not in the
 /// pinned set, or when `host` was never pinned (i.e. not present in
 /// `lease.dns_pinned_ips`).
-pub fn verify_pinned_ip(
-    lease: &Lease,
-    host: &str,
-    resolved_ip: IpAddr,
-) -> Result<(), ProxyError> {
+pub fn verify_pinned_ip(lease: &Lease, host: &str, resolved_ip: IpAddr) -> Result<(), ProxyError> {
     match lease.dns_pinned_ips.get(host) {
         Some(pinned_ips) if pinned_ips.contains(&resolved_ip) => Ok(()),
         Some(pinned_ips) => Err(ProxyError::DnsPinMismatch {
@@ -52,10 +48,7 @@ pub fn verify_pinned_ip(
 /// In practice a hostname should resolve to the same set of IPs as it did at
 /// lease creation time, since DNS TTLs are short and we re-verify on every
 /// connection attempt.
-pub async fn resolve_and_verify(
-    lease: &Lease,
-    host: &str,
-) -> Result<Vec<IpAddr>, ProxyError> {
+pub async fn resolve_and_verify(lease: &Lease, host: &str) -> Result<Vec<IpAddr>, ProxyError> {
     // Append `:0` to satisfy `lookup_host`'s socket-address requirement.
     let addr_str = format!("{host}:0");
     let resolved_addrs = tokio::net::lookup_host(addr_str)
@@ -148,7 +141,11 @@ mod tests {
         let err = verify_pinned_ip(&lease, "api.example.com", resolved)
             .expect_err("mismatched IP must fail");
         match err {
-            ProxyError::DnsPinMismatch { host, resolved: r, pinned: p } => {
+            ProxyError::DnsPinMismatch {
+                host,
+                resolved: r,
+                pinned: p,
+            } => {
                 assert_eq!(host, "api.example.com");
                 assert_eq!(r, resolved);
                 assert_eq!(p, vec![pinned]);
@@ -181,10 +178,8 @@ mod tests {
         pins.insert("api.example.com".to_string(), vec![ip1, ip2]);
         let lease = make_lease_with_pins(pins);
 
-        verify_pinned_ip(&lease, "api.example.com", ip1)
-            .expect("first pinned IP must pass");
-        verify_pinned_ip(&lease, "api.example.com", ip2)
-            .expect("second pinned IP must pass");
+        verify_pinned_ip(&lease, "api.example.com", ip1).expect("first pinned IP must pass");
+        verify_pinned_ip(&lease, "api.example.com", ip2).expect("second pinned IP must pass");
     }
 
     #[tokio::test]

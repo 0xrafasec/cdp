@@ -1,10 +1,6 @@
 //! Core lease types: `LeaseId`, `LeaseStatus`, `Lease`, and scope utilities.
 
-use std::{
-    collections::HashMap,
-    fmt,
-    net::IpAddr,
-};
+use std::{collections::HashMap, fmt, net::IpAddr};
 
 use chrono::{DateTime, Utc};
 use rand::RngCore as _;
@@ -28,14 +24,11 @@ impl LeaseId {
     pub fn generate() -> Self {
         let mut bytes = [0u8; 32];
         rand::rng().fill_bytes(&mut bytes);
-        let hex = bytes.iter().fold(
-            String::with_capacity(64),
-            |mut s, b| {
-                use std::fmt::Write;
-                write!(s, "{b:02x}").expect("write to String is infallible");
-                s
-            },
-        );
+        let hex = bytes.iter().fold(String::with_capacity(64), |mut s, b| {
+            use std::fmt::Write;
+            write!(s, "{b:02x}").expect("write to String is infallible");
+            s
+        });
         Self(hex)
     }
 
@@ -91,7 +84,6 @@ pub struct Lease {
     pub approval_method: String,
 
     // --- Agent identity ---
-
     /// Composite fingerprint hash of the requesting agent: `SHA-256(uid || pid || binary_hash || start_time)`.
     pub agent_fingerprint_hash: [u8; 32],
 
@@ -105,12 +97,10 @@ pub struct Lease {
     pub agent_pid: u32,
 
     // --- Granted scope ---
-
     /// The scope granted by the policy (intersection of requested and allowed).
     pub granted_scope: Scope,
 
     // --- Authentication ---
-
     /// HMAC-SHA256 lease token (hex-encoded) for per-request authentication.
     pub lease_token: String,
 
@@ -118,13 +108,11 @@ pub struct Lease {
     pub channel_binding_nonce: [u8; 32],
 
     // --- DNS pinning ---
-
     /// IPs resolved at lease creation time, keyed by hostname.
     /// The proxy must only connect to these IPs for the lifetime of the lease.
     pub dns_pinned_ips: HashMap<String, Vec<IpAddr>>,
 
     // --- Lifecycle ---
-
     /// Current lifecycle state.
     pub status: LeaseStatus,
 
@@ -141,7 +129,6 @@ pub struct Lease {
     pub cumulative_ttl_seconds: u64,
 
     // --- Limits ---
-
     /// Maximum number of proxied requests permitted; `None` means unlimited.
     pub max_requests: Option<u64>,
 
@@ -161,7 +148,6 @@ pub struct Lease {
     pub renewable: bool,
 
     // --- Delegation ---
-
     /// Parent lease ID if this is a delegated (child) lease.
     pub parent_lease_id: Option<LeaseId>,
 
@@ -178,7 +164,6 @@ pub struct Lease {
     pub delegation_max_depth: Option<u32>,
 
     // --- Network ---
-
     /// Whether the proxy may follow HTTP redirects on behalf of this lease.
     pub follow_redirects: bool,
 }
@@ -519,7 +504,10 @@ mod tests {
             ..Default::default()
         };
         let child = Scope {
-            hosts: vec!["api.example.com".to_string(), "evil.example.com".to_string()],
+            hosts: vec![
+                "api.example.com".to_string(),
+                "evil.example.com".to_string(),
+            ],
             ..Default::default()
         };
         assert!(!is_scope_subset(&child, &parent));

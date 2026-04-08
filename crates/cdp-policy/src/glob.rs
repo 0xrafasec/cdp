@@ -49,8 +49,7 @@ fn matches_segs(path: &[&str], pat: &[&str]) -> bool {
     // Stack entries: (path segment index, pattern segment index).
     let mut stack: Vec<(usize, usize)> = vec![(0, 0)];
     // Visited set to prevent redundant re-exploration of the same state.
-    let mut visited: std::collections::HashSet<(usize, usize)> =
-        std::collections::HashSet::new();
+    let mut visited: std::collections::HashSet<(usize, usize)> = std::collections::HashSet::new();
 
     while let Some((pi, qi)) = stack.pop() {
         if !visited.insert((pi, qi)) {
@@ -278,10 +277,7 @@ mod tests {
     #[test]
     fn consecutive_double_wildcards() {
         // Pathological pattern: should not blow up and should still be correct.
-        assert!(path_matches_glob(
-            "/a/b/c/d/e",
-            "**/**/**"
-        ));
+        assert!(path_matches_glob("/a/b/c/d/e", "**/**/**"));
     }
 
     #[test]

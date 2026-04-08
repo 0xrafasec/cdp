@@ -187,11 +187,13 @@ impl JsonRpcResponse {
 
 /// Encode a byte slice as a lowercase hex string.
 pub fn hex_encode(bytes: &[u8]) -> String {
-    bytes.iter().fold(String::with_capacity(bytes.len() * 2), |mut s, b| {
-        use std::fmt::Write;
-        let _ = write!(s, "{b:02x}");
-        s
-    })
+    bytes
+        .iter()
+        .fold(String::with_capacity(bytes.len() * 2), |mut s, b| {
+            use std::fmt::Write;
+            let _ = write!(s, "{b:02x}");
+            s
+        })
 }
 
 #[cfg(test)]
@@ -220,11 +222,8 @@ mod tests {
 
     #[test]
     fn json_rpc_response_error_serializes() {
-        let resp = JsonRpcResponse::error(
-            serde_json::Value::Number(1.into()),
-            -32600,
-            "bad request",
-        );
+        let resp =
+            JsonRpcResponse::error(serde_json::Value::Number(1.into()), -32600, "bad request");
         let json = serde_json::to_string(&resp).unwrap();
         assert!(json.contains("\"-32600\"").not() || json.contains("-32600"));
         assert!(json.contains("bad request"));

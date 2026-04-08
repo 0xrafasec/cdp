@@ -92,14 +92,12 @@ impl ProxyManager {
         let mut listeners = self.listeners.lock().await;
 
         // Find a port not currently in use.
-        let port = self
-            .find_free_port(&listeners)
-            .ok_or_else(|| {
-                ProxyError::PortExhausted(format!(
-                    "all ports in range {}-{} are in use",
-                    self.config.port_range_start, self.config.port_range_end
-                ))
-            })?;
+        let port = self.find_free_port(&listeners).ok_or_else(|| {
+            ProxyError::PortExhausted(format!(
+                "all ports in range {}-{} are in use",
+                self.config.port_range_start, self.config.port_range_end
+            ))
+        })?;
 
         let bind_addr = SocketAddr::new(self.config.bind_address, port);
 
@@ -154,14 +152,12 @@ impl ProxyManager {
     pub async fn allocate_port(&self, lease_id: &LeaseId) -> Result<u16, ProxyError> {
         let mut listeners = self.listeners.lock().await;
 
-        let port = self
-            .find_free_port(&listeners)
-            .ok_or_else(|| {
-                ProxyError::PortExhausted(format!(
-                    "all ports in range {}-{} are in use",
-                    self.config.port_range_start, self.config.port_range_end
-                ))
-            })?;
+        let port = self.find_free_port(&listeners).ok_or_else(|| {
+            ProxyError::PortExhausted(format!(
+                "all ports in range {}-{} are in use",
+                self.config.port_range_start, self.config.port_range_end
+            ))
+        })?;
 
         let bind_addr = SocketAddr::new(self.config.bind_address, port);
         let (tx, _rx) = tokio::sync::oneshot::channel();
@@ -215,9 +211,7 @@ impl ProxyManager {
     /// Bind address for the given lease, or `None` if not allocated.
     pub async fn bind_addr_for_lease(&self, lease_id: &LeaseId) -> Option<SocketAddr> {
         let listeners = self.listeners.lock().await;
-        listeners
-            .get(lease_id.as_str())
-            .map(|(_, h)| h.bind_addr)
+        listeners.get(lease_id.as_str()).map(|(_, h)| h.bind_addr)
     }
 
     // -----------------------------------------------------------------------
@@ -225,10 +219,7 @@ impl ProxyManager {
     // -----------------------------------------------------------------------
 
     /// Find the first port in the configured range not already in use.
-    fn find_free_port(
-        &self,
-        listeners: &HashMap<String, (u16, ListenerHandle)>,
-    ) -> Option<u16> {
+    fn find_free_port(&self, listeners: &HashMap<String, (u16, ListenerHandle)>) -> Option<u16> {
         (self.config.port_range_start..=self.config.port_range_end)
             .find(|&port| !listeners.values().any(|(p, _)| *p == port))
     }

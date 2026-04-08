@@ -103,8 +103,7 @@ mod tests {
 
     #[test]
     fn test_strip_proxy_authorization_header() {
-        let mut resp =
-            make_response_with_headers(&[("Proxy-Authorization", "Basic dXNlcjpwYXNz")]);
+        let mut resp = make_response_with_headers(&[("Proxy-Authorization", "Basic dXNlcjpwYXNz")]);
         sanitize_response(&mut resp);
         assert!(
             resp.headers().get("proxy-authorization").is_none(),
@@ -121,17 +120,23 @@ mod tests {
         ]);
         sanitize_response(&mut resp);
         assert_eq!(
-            resp.headers().get(CONTENT_TYPE).and_then(|v| v.to_str().ok()),
+            resp.headers()
+                .get(CONTENT_TYPE)
+                .and_then(|v| v.to_str().ok()),
             Some("application/json"),
             "Content-Type must be preserved"
         );
         assert_eq!(
-            resp.headers().get("x-request-id").and_then(|v| v.to_str().ok()),
+            resp.headers()
+                .get("x-request-id")
+                .and_then(|v| v.to_str().ok()),
             Some("abc-123"),
             "X-Request-Id must be preserved"
         );
         assert_eq!(
-            resp.headers().get("cache-control").and_then(|v| v.to_str().ok()),
+            resp.headers()
+                .get("cache-control")
+                .and_then(|v| v.to_str().ok()),
             Some("no-store"),
             "Cache-Control must be preserved"
         );
