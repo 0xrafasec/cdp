@@ -35,27 +35,20 @@ CDP fills this gap — the same way [MCP](https://modelcontextprotocol.io/) stan
 
 A local daemon called the **CDP Gate** mediates all credential access. Agents never receive raw credentials — authentication is injected at the transport layer.
 
-```
-  Agent (untrusted)          CDP Gate (trusted)            Target Service
-  ─────────────────          ──────────────────            ──────────────
-        │                          │                             │
-        │  1. Request lease        │                             │
-        │  (credential_ref,        │                             │
-        │   scope, reason)         │                             │
-        │ ─────────────────────►   │                             │
-        │                          │  2. Evaluate policy         │
-        │                          │  3. Prompt user (if needed) │
-        │                          │  4. Fetch from vault        │
-        │  lease_token + proxy_url │                             │
-        │ ◄─────────────────────   │                             │
-        │                          │                             │
-        │  5. HTTP via proxy       │                             │
-        │ ─────────────────────►   │  6. Inject credentials      │
-        │                          │ ─────────────────────────►  │
-        │                          │                             │
-        │                          │  7. Response                │
-        │  8. Sanitized response   │ ◄─────────────────────────  │
-        │ ◄─────────────────────   │                             │
+```mermaid
+sequenceDiagram
+    participant Agent as Agent (untrusted)
+    participant Gate as CDP Gate (trusted)
+    participant Target as Target Service
+
+    Agent->>Gate: 1. Request lease (credential_ref, scope, reason)
+    Note over Gate: 2. Evaluate policy<br/>3. Prompt user (if needed)<br/>4. Fetch from vault
+    Gate-->>Agent: lease_token + proxy_url
+
+    Agent->>Gate: 5. HTTP via proxy
+    Gate->>Target: 6. Inject credentials
+    Target-->>Gate: 7. Response
+    Gate-->>Agent: 8. Sanitized response
 ```
 
 The agent communicates through an authenticated proxy. Credentials exist only inside the Gate's encrypted memory, decrypted at the moment of injection, then immediately zeroized.

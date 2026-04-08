@@ -4,7 +4,7 @@
 
 **Version:** 0.2.0-draft
 **Date:** April 2026
-**Authors:** [TBD]
+**Authors:** 0xrafasec
 
 ---
 
