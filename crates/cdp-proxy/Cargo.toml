@@ -23,6 +23,12 @@ nix = { workspace = true }
 globset = "0.4"
 chrono = { workspace = true }
 libc = { workspace = true }
+rcgen = "0.13"
+rustls = { version = "0.23", features = ["ring"] }
+tokio-rustls = "0.26"
+webpki-roots = "0.26"
+time = "0.3"
+cdp-browser = { workspace = true }
 
 [features]
 test-support = []

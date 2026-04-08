@@ -9,6 +9,8 @@ pub mod credential;
 pub mod dns;
 pub mod http;
 pub mod manager;
+pub mod mitm;
+pub mod mitm_ca;
 pub mod redirect;
 pub mod sanitizer;
 pub mod scope;
@@ -127,6 +129,8 @@ pub fn parse_port_range(range_str: &str) -> Result<(u16, u16), ProxyError> {
 // Re-export key types.
 pub use credential::CredentialProvider;
 pub use manager::ProxyManager;
+pub use mitm::MitmProxy;
+pub use mitm_ca::MitmCa;
 
 #[cfg(test)]
 mod tests {
