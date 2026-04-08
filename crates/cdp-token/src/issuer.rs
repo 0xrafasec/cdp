@@ -8,14 +8,13 @@
 use std::sync::Arc;
 
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
-use ed25519_dalek::{Signer, SigningKey, VerifyingKey, Verifier};
+use ed25519_dalek::{Signer, SigningKey, Verifier, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
 use cdp_crypto::SecureBuffer;
 
 use crate::{Result, TokenError};
-
 
 // ---------------------------------------------------------------------------
 // Claims
@@ -64,8 +63,7 @@ const JWT_HEADER_B64: &str = "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9";
 /// Validates the pre-computed header at module load time (debug builds only).
 #[cfg(debug_assertions)]
 fn _check_header_const() {
-    let expected = URL_SAFE_NO_PAD
-        .encode(r#"{"alg":"EdDSA","typ":"JWT"}"#.as_bytes());
+    let expected = URL_SAFE_NO_PAD.encode(r#"{"alg":"EdDSA","typ":"JWT"}"#.as_bytes());
     assert_eq!(expected, JWT_HEADER_B64, "JWT_HEADER_B64 constant is wrong");
 }
 
@@ -138,8 +136,8 @@ impl TokenIssuer {
     #[instrument(skip(self, claims), fields(sub = %claims.sub, jti = %claims.jti))]
     pub fn issue(&self, claims: &TokenClaims) -> Result<String> {
         // Serialize claims to JSON.
-        let claims_json = serde_json::to_vec(claims)
-            .map_err(|e| TokenError::Serialization(e.to_string()))?;
+        let claims_json =
+            serde_json::to_vec(claims).map_err(|e| TokenError::Serialization(e.to_string()))?;
         let claims_b64 = URL_SAFE_NO_PAD.encode(&claims_json);
 
         // The signing input is: base64url(header) + "." + base64url(claims)
@@ -174,7 +172,9 @@ impl TokenIssuer {
     pub fn verify(&self, token: &str) -> Result<TokenClaims> {
         let parts: Vec<&str> = token.splitn(3, '.').collect();
         if parts.len() != 3 {
-            return Err(TokenError::InvalidClaims("malformed JWT: expected 3 parts".to_string()));
+            return Err(TokenError::InvalidClaims(
+                "malformed JWT: expected 3 parts".to_string(),
+            ));
         }
 
         let (header_b64, claims_b64, sig_b64) = (parts[0], parts[1], parts[2]);
@@ -186,7 +186,9 @@ impl TokenIssuer {
         let header: serde_json::Value = serde_json::from_slice(&header_json)
             .map_err(|e| TokenError::InvalidClaims(format!("header parse error: {e}")))?;
         if header.get("alg").and_then(|v| v.as_str()) != Some("EdDSA") {
-            return Err(TokenError::InvalidClaims("unsupported algorithm; expected EdDSA".to_string()));
+            return Err(TokenError::InvalidClaims(
+                "unsupported algorithm; expected EdDSA".to_string(),
+            ));
         }
 
         // 2. Verify signature over signing_input = header_b64 + "." + claims_b64.
@@ -238,8 +240,8 @@ impl TokenIssuer {
     pub(crate) fn sign_claims_value(&self, claims: &serde_json::Value) -> Result<String> {
         use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 
-        let claims_json = serde_json::to_vec(claims)
-            .map_err(|e| TokenError::Serialization(e.to_string()))?;
+        let claims_json =
+            serde_json::to_vec(claims).map_err(|e| TokenError::Serialization(e.to_string()))?;
         let claims_b64 = URL_SAFE_NO_PAD.encode(&claims_json);
         let signing_input = format!("{JWT_HEADER_B64}.{claims_b64}");
 
@@ -342,7 +344,9 @@ mod tests {
             .encode(r#"{"iss":"evil","sub":"attacker","aud":"api","exp":9999999999,"iat":0,"jti":"x","lease_id":"y","single_use":false}"#);
         parts[1] = &tampered_claims;
         let bad_token = parts.join(".");
-        let err = issuer.verify(&bad_token).expect_err("should reject tampered token");
+        let err = issuer
+            .verify(&bad_token)
+            .expect_err("should reject tampered token");
         // Should fail sig verification.
         assert!(matches!(err, TokenError::Crypto(_)));
     }
@@ -364,13 +368,18 @@ mod tests {
     #[test]
     fn verify_rejects_malformed_token() {
         let issuer = TokenIssuer::new().expect("gen key");
-        let err = issuer.verify("not.a.token.with.five.parts").expect_err("malformed");
+        let err = issuer
+            .verify("not.a.token.with.five.parts")
+            .expect_err("malformed");
         // splitn(3, '.') with more than 3 parts just puts the rest in part[2],
         // which will fail signature verification — but the simpler case is fewer parts.
         let err2 = issuer.verify("onlytwoparts.here").expect_err("two parts");
         assert!(matches!(err2, TokenError::InvalidClaims(_)));
         // The first case has the right number of parts but a fake signature.
-        assert!(matches!(err, TokenError::InvalidClaims(_) | TokenError::Crypto(_)));
+        assert!(matches!(
+            err,
+            TokenError::InvalidClaims(_) | TokenError::Crypto(_)
+        ));
     }
 
     #[test]
@@ -379,7 +388,9 @@ mod tests {
         let issuer_b = TokenIssuer::new().expect("gen key B");
         let claims = make_claims(300);
         let token = issuer_a.issue(&claims).expect("issue with A");
-        let err = issuer_b.verify(&token).expect_err("B cannot verify A's token");
+        let err = issuer_b
+            .verify(&token)
+            .expect_err("B cannot verify A's token");
         assert!(matches!(err, TokenError::Crypto(_)));
     }
 }

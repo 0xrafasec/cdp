@@ -234,7 +234,10 @@ pub fn verify_mtls_attestation(cert_der: &[u8]) -> Result<AttestationResult> {
 ///
 /// Only RS256 is supported. Requests are made with a 10-second timeout.
 #[instrument(skip(token, config), fields(token_prefix = %token.get(..20).unwrap_or("?")))]
-pub async fn verify_oidc_attestation(token: &str, config: &OidcConfig) -> Result<AttestationResult> {
+pub async fn verify_oidc_attestation(
+    token: &str,
+    config: &OidcConfig,
+) -> Result<AttestationResult> {
     use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 
     let parts: Vec<&str> = token.splitn(3, '.').collect();
@@ -255,7 +258,10 @@ pub async fn verify_oidc_attestation(token: &str, config: &OidcConfig) -> Result
             "unsupported algorithm {alg:?}; only RS256 is accepted"
         )));
     }
-    let kid = header.get("kid").and_then(|v| v.as_str()).map(str::to_string);
+    let kid = header
+        .get("kid")
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
 
     // Decode claims (without verifying signature yet).
     let claims_bytes = URL_SAFE_NO_PAD
@@ -283,16 +289,14 @@ pub async fn verify_oidc_attestation(token: &str, config: &OidcConfig) -> Result
         .trusted_issuers
         .iter()
         .find(|ti| ti.issuer_url == iss)
-        .ok_or_else(|| {
-            TokenError::OidcVerification(format!("issuer {iss:?} is not trusted"))
-        })?;
+        .ok_or_else(|| TokenError::OidcVerification(format!("issuer {iss:?} is not trusted")))?;
 
     // Check audience.
     let aud_ok = match aud {
         Some(serde_json::Value::String(s)) => s == &trusted.required_audience,
-        Some(serde_json::Value::Array(arr)) => {
-            arr.iter().any(|v| v.as_str() == Some(&trusted.required_audience))
-        }
+        Some(serde_json::Value::Array(arr)) => arr
+            .iter()
+            .any(|v| v.as_str() == Some(&trusted.required_audience)),
         _ => false,
     };
     if !aud_ok {
@@ -309,7 +313,10 @@ pub async fn verify_oidc_attestation(token: &str, config: &OidcConfig) -> Result
     }
 
     // Fetch JWKS.
-    let jwks_url = format!("{}/.well-known/jwks.json", trusted.issuer_url.trim_end_matches('/'));
+    let jwks_url = format!(
+        "{}/.well-known/jwks.json",
+        trusted.issuer_url.trim_end_matches('/')
+    );
     debug!(url = %jwks_url, "fetching JWKS");
 
     let client = reqwest::Client::builder()
@@ -380,9 +387,11 @@ pub fn verify_signed_code_attestation(_evidence: &[u8]) -> Result<AttestationRes
 fn find_jwk<'a>(jwks: &'a Jwks, kid: Option<&str>) -> Option<&'a JwkKey> {
     if let Some(kid) = kid {
         // Prefer the key with a matching `kid`.
-        if let Some(k) = jwks.keys.iter().find(|k| {
-            k.key_type == "RSA" && k.key_id.as_deref() == Some(kid)
-        }) {
+        if let Some(k) = jwks
+            .keys
+            .iter()
+            .find(|k| k.key_type == "RSA" && k.key_id.as_deref() == Some(kid))
+        {
             return Some(k);
         }
     }
@@ -419,18 +428,22 @@ fn verify_rs256(header_b64: &str, claims_b64: &str, sig_b64: &str, jwk: &JwkKey)
     let signing_input = format!("{header_b64}.{claims_b64}");
     verifying_key
         .verify(signing_input.as_bytes(), &signature)
-        .map_err(|_| TokenError::OidcVerification("RS256 signature verification failed".to_string()))?;
+        .map_err(|_| {
+            TokenError::OidcVerification("RS256 signature verification failed".to_string())
+        })?;
 
     Ok(())
 }
 
 /// Encode bytes as lowercase hex.
 fn hex_encode(bytes: &[u8]) -> String {
-    bytes.iter().fold(String::with_capacity(bytes.len() * 2), |mut s, b| {
-        use std::fmt::Write;
-        let _ = write!(s, "{b:02x}");
-        s
-    })
+    bytes
+        .iter()
+        .fold(String::with_capacity(bytes.len() * 2), |mut s, b| {
+            use std::fmt::Write;
+            let _ = write!(s, "{b:02x}");
+            s
+        })
 }
 
 // ---------------------------------------------------------------------------

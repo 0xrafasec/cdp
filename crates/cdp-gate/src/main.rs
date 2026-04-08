@@ -14,7 +14,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use tokio::signal::unix::SignalKind;
 
-use cdp_audit::{AuditLogger, AuditEventType, AuditFields};
+use cdp_audit::{AuditEventType, AuditFields, AuditLogger};
 use cdp_lease::LeaseManager;
 use cdp_policy::{ApprovalConfig, PolicyEngine};
 use cdp_proxy::{ProxyConfig, ProxyManager};
@@ -75,7 +75,8 @@ async fn gate_main() -> Result<()> {
     {
         std::fs::create_dir_all(parent)?;
     }
-    let (audit_tx, audit_rx) = tokio::sync::mpsc::unbounded_channel::<(AuditEventType, AuditFields)>();
+    let (audit_tx, audit_rx) =
+        tokio::sync::mpsc::unbounded_channel::<(AuditEventType, AuditFields)>();
     // Spawn the audit logger task.
     let audit_log_path_clone = audit_log_path.clone();
     tokio::spawn(async move {
@@ -105,7 +106,10 @@ async fn gate_main() -> Result<()> {
     zeroize::Zeroize::zeroize(&mut gate_key_bytes);
 
     // 7. Create LeaseManager.
-    let lease_manager = Arc::new(LeaseManager::new((*gate_key).clone(), Some(audit_tx.clone())));
+    let lease_manager = Arc::new(LeaseManager::new(
+        (*gate_key).clone(),
+        Some(audit_tx.clone()),
+    ));
     // Start the expiry sweep background task.
     let _sweep_handle = lease_manager.start_expiry_sweep();
 
@@ -126,7 +130,11 @@ async fn gate_main() -> Result<()> {
     let _watcher_handle = policy_engine.start_watcher();
 
     // 9. Create CredentialProvider based on vault config.
-    let credential_provider: Arc<dyn cdp_proxy::CredentialProvider> = match config.vault.backend.as_str() {
+    let credential_provider: Arc<dyn cdp_proxy::CredentialProvider> = match config
+        .vault
+        .backend
+        .as_str()
+    {
         "file" => {
             let vault_path = config::expand_tilde(&config.vault.file.path);
             if vault_path.exists() {
@@ -159,7 +167,9 @@ async fn gate_main() -> Result<()> {
             match cdp_vault::SubprocessManager::spawn(
                 &config.vault.bitwarden.cli_path,
                 config.vault.subprocess_sandbox,
-            ).await {
+            )
+            .await
+            {
                 Ok(manager) => {
                     let ipc_key = manager.ipc_key().clone();
                     tracing::info!("vault backend: bitwarden (subprocess)");
@@ -179,7 +189,10 @@ async fn gate_main() -> Result<()> {
             Arc::new(NoOpCredentialProvider) as Arc<dyn cdp_proxy::CredentialProvider>
         }
         other => {
-            tracing::warn!(backend = other, "unknown vault backend; credential injection disabled");
+            tracing::warn!(
+                backend = other,
+                "unknown vault backend; credential injection disabled"
+            );
             Arc::new(NoOpCredentialProvider) as Arc<dyn cdp_proxy::CredentialProvider>
         }
     };
@@ -189,7 +202,10 @@ async fn gate_main() -> Result<()> {
         cdp_proxy::parse_port_range(&config.proxy.port_range)
             .map_err(|e| anyhow::anyhow!("invalid proxy port range: {e}"))?;
 
-    let proxy_bind_addr: std::net::IpAddr = config.proxy.bind_address.parse()
+    let proxy_bind_addr: std::net::IpAddr = config
+        .proxy
+        .bind_address
+        .parse()
         .map_err(|e| anyhow::anyhow!("invalid proxy bind address: {e}"))?;
 
     let proxy_config = ProxyConfig {
@@ -206,8 +222,7 @@ async fn gate_main() -> Result<()> {
     ));
 
     // 11. Create router with death channel
-    let (death_tx, mut death_rx) =
-        tokio::sync::mpsc::channel::<types::DeathNotification>(256);
+    let (death_tx, mut death_rx) = tokio::sync::mpsc::channel::<types::DeathNotification>(256);
     let config = Arc::new(config);
     let router = Arc::new(router::Router::new(
         config.clone(),
@@ -287,14 +302,22 @@ impl cdp_proxy::CredentialProvider for NoOpCredentialProvider {
         &'a self,
         credential_ref: &'a str,
         _lease_id: &'a str,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<cdp_proxy::credential::CredentialHeader>, cdp_proxy::ProxyError>> + Send + 'a>> {
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<
+                        Vec<cdp_proxy::credential::CredentialHeader>,
+                        cdp_proxy::ProxyError,
+                    >,
+                > + Send
+                + 'a,
+        >,
+    > {
         let msg = format!(
             "vault not configured; cannot fetch credential {credential_ref:?}. \
              Configure the vault backend to enable credential injection."
         );
-        Box::pin(async move {
-            Err(cdp_proxy::ProxyError::CredentialInjection(msg))
-        })
+        Box::pin(async move { Err(cdp_proxy::ProxyError::CredentialInjection(msg)) })
     }
 }
 
@@ -318,20 +341,36 @@ impl cdp_proxy::CredentialProvider for VaultCredentialProvider {
         &'a self,
         credential_ref: &'a str,
         _lease_id: &'a str,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<cdp_proxy::credential::CredentialHeader>, cdp_proxy::ProxyError>> + Send + 'a>> {
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<
+                        Vec<cdp_proxy::credential::CredentialHeader>,
+                        cdp_proxy::ProxyError,
+                    >,
+                > + Send
+                + 'a,
+        >,
+    > {
         Box::pin(async move {
             // 1. Fetch encrypted credential from vault.
-            let encrypted = self.vault.fetch(credential_ref).await
+            let encrypted = self
+                .vault
+                .fetch(credential_ref)
+                .await
                 .map_err(|e| cdp_proxy::ProxyError::CredentialInjection(e.to_string()))?;
 
             // 2. Decrypt with IPC key using ChaCha20-Poly1305.
-            use chacha20poly1305::{aead::Aead, KeyInit, ChaCha20Poly1305, Nonce};
+            use chacha20poly1305::{ChaCha20Poly1305, KeyInit, Nonce, aead::Aead};
             let cipher = ChaCha20Poly1305::new(self.ipc_key.as_ref().into());
             let nonce = Nonce::from_slice(&encrypted.nonce);
-            let plaintext = cipher.decrypt(nonce, encrypted.data.as_ref())
-                .map_err(|_| cdp_proxy::ProxyError::CredentialInjection(
-                    "failed to decrypt credential from vault".to_string()
-                ))?;
+            let plaintext = cipher
+                .decrypt(nonce, encrypted.data.as_ref())
+                .map_err(|_| {
+                    cdp_proxy::ProxyError::CredentialInjection(
+                        "failed to decrypt credential from vault".to_string(),
+                    )
+                })?;
 
             // 3. Wrap in SecureBuffer and return as Authorization header.
             let value = cdp_crypto::SecureBuffer::new(plaintext);

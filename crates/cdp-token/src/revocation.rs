@@ -62,11 +62,7 @@ impl RevocationList {
     /// Returns `Ok(())` if the token has not been seen before (it is now marked).
     /// Returns `Err(TokenError::Revoked)` if the token is already in the list.
     #[instrument(skip(self))]
-    pub async fn check_and_mark_used(
-        &self,
-        jti: &str,
-        expires_at: DateTime<Utc>,
-    ) -> Result<()> {
+    pub async fn check_and_mark_used(&self, jti: &str, expires_at: DateTime<Utc>) -> Result<()> {
         let mut entries = self.entries.write().await;
         if entries.contains_key(jti) {
             return Err(TokenError::Revoked);
@@ -115,8 +111,8 @@ impl RevocationList {
             .map(|(jti, exp)| (jti.clone(), exp.to_rfc3339()))
             .collect();
 
-        let payload = serde_json::to_value(&map)
-            .map_err(|e| TokenError::Serialization(e.to_string()))?;
+        let payload =
+            serde_json::to_value(&map).map_err(|e| TokenError::Serialization(e.to_string()))?;
 
         let now = Utc::now();
         let claims = crate::issuer::TokenClaims {
@@ -133,8 +129,8 @@ impl RevocationList {
         };
 
         // We embed the entries as an extra field by building a merged JSON object.
-        let mut claims_map = serde_json::to_value(&claims)
-            .map_err(|e| TokenError::Serialization(e.to_string()))?;
+        let mut claims_map =
+            serde_json::to_value(&claims).map_err(|e| TokenError::Serialization(e.to_string()))?;
         if let serde_json::Value::Object(ref mut obj) = claims_map {
             obj.insert("revoked_entries".to_string(), payload);
         }
@@ -170,7 +166,9 @@ mod tests {
         let jti = "single-use-jti";
         let exp = Utc::now() + Duration::seconds(300);
 
-        rl.check_and_mark_used(jti, exp).await.expect("first use should succeed");
+        rl.check_and_mark_used(jti, exp)
+            .await
+            .expect("first use should succeed");
         // Now it is in the list.
         assert!(rl.is_revoked(jti).await);
     }
@@ -182,7 +180,10 @@ mod tests {
         let exp = Utc::now() + Duration::seconds(300);
 
         rl.check_and_mark_used(jti, exp).await.expect("first use");
-        let err = rl.check_and_mark_used(jti, exp).await.expect_err("second use");
+        let err = rl
+            .check_and_mark_used(jti, exp)
+            .await
+            .expect_err("second use");
         assert!(matches!(err, TokenError::Revoked));
     }
 

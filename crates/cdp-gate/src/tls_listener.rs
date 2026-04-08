@@ -151,7 +151,11 @@ impl TlsListener {
             .map_err(|e| GateError::Listener(format!("local_addr failed: {e}")))?;
 
         tracing::info!(addr = %bind_addr, "mTLS listener bound");
-        Ok(Self { inner, acceptor, bind_addr })
+        Ok(Self {
+            inner,
+            acceptor,
+            bind_addr,
+        })
     }
 
     /// The local address this listener is bound to.
@@ -166,20 +170,21 @@ impl TlsListener {
     /// peer certificate.
     #[instrument(skip(self))]
     pub async fn accept(&self) -> Result<(TlsStream<TcpStream>, ClientIdentity), GateError> {
-        let (tcp_stream, peer_addr) = self.inner.accept().await.map_err(|e| {
-            GateError::Listener(format!("TCP accept failed: {e}"))
-        })?;
+        let (tcp_stream, peer_addr) = self
+            .inner
+            .accept()
+            .await
+            .map_err(|e| GateError::Listener(format!("TCP accept failed: {e}")))?;
         debug!(peer = %peer_addr, "accepted TCP connection, starting TLS handshake");
 
-        let tls_stream = self
-            .acceptor
-            .accept(tcp_stream)
-            .await
-            .map_err(|e| GateError::Listener(format!("TLS handshake failed from {peer_addr}: {e}")))?;
+        let tls_stream = self.acceptor.accept(tcp_stream).await.map_err(|e| {
+            GateError::Listener(format!("TLS handshake failed from {peer_addr}: {e}"))
+        })?;
 
         // Extract client identity from the server-side TLS connection.
-        let identity = extract_client_identity(&tls_stream)
-            .map_err(|e| GateError::AgentVerification(format!("client identity extraction: {e}")))?;
+        let identity = extract_client_identity(&tls_stream).map_err(|e| {
+            GateError::AgentVerification(format!("client identity extraction: {e}"))
+        })?;
 
         debug!(
             fingerprint = %identity.certificate_fingerprint,
@@ -205,9 +210,7 @@ fn load_certs(path: &Path) -> Result<Vec<rustls::pki_types::CertificateDer<'stat
 }
 
 /// Load PEM-encoded private key from a file.
-fn load_private_key(
-    path: &Path,
-) -> Result<rustls::pki_types::PrivateKeyDer<'static>, GateError> {
+fn load_private_key(path: &Path) -> Result<rustls::pki_types::PrivateKeyDer<'static>, GateError> {
     let key_pem = fs::read(path).map_err(|e| {
         GateError::Listener(format!("failed to read key file {}: {e}", path.display()))
     })?;
@@ -246,9 +249,7 @@ fn load_private_key(
 ///
 /// Uses raw DER parsing (via the `cdp-token` crate's mTLS verifier) to extract
 /// CN, SANs, and the certificate fingerprint.
-fn extract_client_identity(
-    stream: &TlsStream<TcpStream>,
-) -> Result<ClientIdentity, String> {
+fn extract_client_identity(stream: &TlsStream<TcpStream>) -> Result<ClientIdentity, String> {
     let (_, server_conn) = stream.get_ref();
 
     // Retrieve the peer certificate chain. The first cert is the end-entity cert.
@@ -316,11 +317,13 @@ fn parse_cert_fields(cert_der: &[u8]) -> (String, Vec<String>, Vec<String>, Stri
 
 /// Encode bytes as lowercase hex.
 fn hex_encode(bytes: &[u8]) -> String {
-    bytes.iter().fold(String::with_capacity(bytes.len() * 2), |mut s, b| {
-        use std::fmt::Write;
-        let _ = write!(s, "{b:02x}");
-        s
-    })
+    bytes
+        .iter()
+        .fold(String::with_capacity(bytes.len() * 2), |mut s, b| {
+            use std::fmt::Write;
+            let _ = write!(s, "{b:02x}");
+            s
+        })
 }
 
 // ---------------------------------------------------------------------------
