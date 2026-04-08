@@ -45,3 +45,21 @@ coverage/
 
 # Documentation build
 /docs/book/
+
+# Claude Code
+.claude/
+
+# Node.js (TypeScript SDK)
+node_modules/
+dist/
+*.js.map
+
+# Python (Python SDK)
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.eggs/
+*.egg
+.venv/
+venv/
