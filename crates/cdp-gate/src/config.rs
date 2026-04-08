@@ -55,6 +55,7 @@ pub struct VaultSection {
     pub backend: String,
     pub subprocess_sandbox: bool,
     pub bitwarden: BitwardenSection,
+    pub file: FileSection,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -62,6 +63,20 @@ pub struct VaultSection {
 pub struct BitwardenSection {
     pub cli_path: String,
     pub session_timeout_minutes: u64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct FileSection {
+    pub path: String,
+}
+
+impl Default for FileSection {
+    fn default() -> Self {
+        Self {
+            path: "~/.config/cdp/dev-vault.json.enc".to_string(),
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -187,6 +202,7 @@ impl Default for VaultSection {
             backend: "bitwarden".to_string(),
             subprocess_sandbox: true,
             bitwarden: BitwardenSection::default(),
+            file: FileSection::default(),
         }
     }
 }
@@ -317,6 +333,9 @@ impl GateConfig {
         self.gate.tls.client_ca_path = expand_tilde(&self.gate.tls.client_ca_path)
             .to_string_lossy()
             .into_owned();
+        self.vault.file.path = expand_tilde(&self.vault.file.path)
+            .to_string_lossy()
+            .into_owned();
     }
 }
 
@@ -430,6 +449,9 @@ subprocess_sandbox = false
 cli_path = "/usr/local/bin/bw"
 session_timeout_minutes = 120
 
+[vault.file]
+path = "/tmp/dev-vault.json.enc"
+
 [approval]
 default_method = "cli"
 gui_command = "zenity"
@@ -479,6 +501,7 @@ kill_after_snapshot = false
         let config: GateConfig = toml::from_str(toml_str).unwrap();
         assert!(config.gate.tls.enabled);
         assert_eq!(config.vault.backend, "1password");
+        assert_eq!(config.vault.file.path, "/tmp/dev-vault.json.enc");
         assert_eq!(config.approval.gui_command, "zenity");
         assert_eq!(config.security.max_delegation_depth, 5);
         assert!(config.security.dns.allow_dynamic_dns);

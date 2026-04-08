@@ -232,7 +232,7 @@
 
 ---
 
-## Phase 6: Vault Backend (Bitwarden + File-based Dev)
+## Phase 6: Vault Backend (Bitwarden + File-based Dev) ✅
 
 **Goal:** The Gate can fetch credentials from Bitwarden (via CLI in sandboxed subprocess) or from an encrypted JSON file (for development).
 

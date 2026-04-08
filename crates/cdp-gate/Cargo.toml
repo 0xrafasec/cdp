@@ -9,6 +9,8 @@ cdp-proxy = { workspace = true }
 cdp-policy = { workspace = true }
 cdp-lease = { workspace = true }
 cdp-audit = { workspace = true }
+cdp-vault = { workspace = true }
+chacha20poly1305 = { workspace = true }
 tokio = { workspace = true }
 nix = { workspace = true }
 serde = { workspace = true }

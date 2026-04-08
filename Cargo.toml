@@ -31,7 +31,8 @@ zeroize = { version = "1", features = ["derive"] }
 rand = "0.9"
 
 # System
-nix = { version = "0.29", features = ["process", "resource", "socket", "mman"] }
+nix = { version = "0.29", features = ["process", "resource", "socket", "mman", "sched"] }
+seccompiler = "0.5"
 
 # Serialization
 serde = { version = "1", features = ["derive"] }

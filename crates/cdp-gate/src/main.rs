@@ -18,8 +18,28 @@ use cdp_lease::LeaseManager;
 use cdp_policy::{ApprovalConfig, PolicyEngine};
 use cdp_proxy::{ProxyConfig, ProxyManager};
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
+    // Check for --vault-worker subprocess mode BEFORE starting the tokio runtime.
+    // The vault subprocess uses synchronous I/O only; it must not start a runtime.
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() >= 4 && args[1] == "--vault-worker" {
+        let socket_fd: i32 = args[2]
+            .parse()
+            .expect("vault-worker: invalid socket fd argument");
+        let bw_cli_path = &args[3];
+        let sandbox_enabled = args.get(4).is_none_or(|s| s == "1");
+        cdp_vault::child_main::vault_worker_main(socket_fd, bw_cli_path, sandbox_enabled);
+        // vault_worker_main() is `-> !`; this line is unreachable.
+    }
+
+    // Normal Gate startup: build the multi-thread tokio runtime and run.
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?
+        .block_on(gate_main())
+}
+
+async fn gate_main() -> Result<()> {
     // 1. Load config
     let config = config::load_config()?;
 
@@ -104,13 +124,64 @@ async fn main() -> Result<()> {
     // Start hot-reload watcher.
     let _watcher_handle = policy_engine.start_watcher();
 
-    // 9. Create CredentialProvider.
-    //
-    // The vault backend (cdp-vault) is implemented in Phase 6.  For now we
-    // use a `NoOpCredentialProvider` — a real implementation that correctly
-    // returns an error when no vault is configured.  This is not a stub; it
-    // is the correct behaviour when the vault subsystem is absent.
-    let credential_provider = Arc::new(NoOpCredentialProvider) as Arc<dyn cdp_proxy::CredentialProvider>;
+    // 9. Create CredentialProvider based on vault config.
+    let credential_provider: Arc<dyn cdp_proxy::CredentialProvider> = match config.vault.backend.as_str() {
+        "file" => {
+            let vault_path = config::expand_tilde(&config.vault.file.path);
+            if vault_path.exists() {
+                // For the dev vault, we need a password. In production this would come
+                // from the approval UI; for now read from CDP_DEV_VAULT_PASSWORD env var.
+                let password = std::env::var("CDP_DEV_VAULT_PASSWORD").map_err(|_| {
+                    anyhow::anyhow!(
+                        "file vault backend requires CDP_DEV_VAULT_PASSWORD environment variable"
+                    )
+                })?;
+                let backend = cdp_vault::FileBackend::open(&vault_path, &password)
+                    .map_err(|e| anyhow::anyhow!("failed to open dev vault: {e}"))?;
+                let ipc_key = backend.ipc_key().clone();
+                tracing::info!("vault backend: file (dev mode)");
+                Arc::new(VaultCredentialProvider {
+                    vault: Arc::new(backend),
+                    ipc_key,
+                })
+            } else {
+                tracing::warn!(
+                    path = %vault_path.display(),
+                    "dev vault file not found; credential injection disabled"
+                );
+                Arc::new(NoOpCredentialProvider) as Arc<dyn cdp_proxy::CredentialProvider>
+            }
+        }
+        "bitwarden" => {
+            // Bitwarden backend uses subprocess manager.
+            // The subprocess is spawned here; unlock happens later via JSON-RPC.
+            match cdp_vault::SubprocessManager::spawn(
+                &config.vault.bitwarden.cli_path,
+                config.vault.subprocess_sandbox,
+            ).await {
+                Ok(manager) => {
+                    let ipc_key = manager.ipc_key().clone();
+                    tracing::info!("vault backend: bitwarden (subprocess)");
+                    Arc::new(VaultCredentialProvider {
+                        vault: Arc::new(manager),
+                        ipc_key,
+                    })
+                }
+                Err(e) => {
+                    tracing::error!(error = %e, "failed to spawn vault subprocess; credential injection disabled");
+                    Arc::new(NoOpCredentialProvider) as Arc<dyn cdp_proxy::CredentialProvider>
+                }
+            }
+        }
+        "none" => {
+            tracing::info!("vault backend: none (credential injection disabled)");
+            Arc::new(NoOpCredentialProvider) as Arc<dyn cdp_proxy::CredentialProvider>
+        }
+        other => {
+            tracing::warn!(backend = other, "unknown vault backend; credential injection disabled");
+            Arc::new(NoOpCredentialProvider) as Arc<dyn cdp_proxy::CredentialProvider>
+        }
+    };
 
     // 10. Create ProxyManager.
     let (proxy_range_start, proxy_range_end) =
@@ -207,8 +278,7 @@ async fn main() -> Result<()> {
 
 /// A credential provider that rejects every request with a clear error.
 ///
-/// This is the correct implementation when no vault backend is configured.
-/// Phase 6 (cdp-vault) will replace this with a real provider.
+/// Used as a fallback when no vault backend is configured or available.
 struct NoOpCredentialProvider;
 
 impl cdp_proxy::CredentialProvider for NoOpCredentialProvider {
@@ -219,10 +289,55 @@ impl cdp_proxy::CredentialProvider for NoOpCredentialProvider {
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<cdp_proxy::credential::CredentialHeader>, cdp_proxy::ProxyError>> + Send + 'a>> {
         let msg = format!(
             "vault not configured; cannot fetch credential {credential_ref:?}. \
-             Configure the vault backend (Phase 6) to enable credential injection."
+             Configure the vault backend to enable credential injection."
         );
         Box::pin(async move {
             Err(cdp_proxy::ProxyError::CredentialInjection(msg))
+        })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// VaultCredentialProvider
+// ---------------------------------------------------------------------------
+
+/// Credential provider backed by a [`cdp_vault::VaultBackend`].
+///
+/// Fetches encrypted credentials from the vault (encrypted with the IPC key),
+/// decrypts them with ChaCha20-Poly1305, and returns them as
+/// [`cdp_proxy::credential::CredentialHeader`] values for HTTP injection.
+struct VaultCredentialProvider {
+    vault: Arc<dyn cdp_vault::VaultBackend>,
+    /// The IPC key used to decrypt credentials returned by the vault backend.
+    ipc_key: zeroize::Zeroizing<[u8; 32]>,
+}
+
+impl cdp_proxy::CredentialProvider for VaultCredentialProvider {
+    fn fetch_credential<'a>(
+        &'a self,
+        credential_ref: &'a str,
+        _lease_id: &'a str,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<cdp_proxy::credential::CredentialHeader>, cdp_proxy::ProxyError>> + Send + 'a>> {
+        Box::pin(async move {
+            // 1. Fetch encrypted credential from vault.
+            let encrypted = self.vault.fetch(credential_ref).await
+                .map_err(|e| cdp_proxy::ProxyError::CredentialInjection(e.to_string()))?;
+
+            // 2. Decrypt with IPC key using ChaCha20-Poly1305.
+            use chacha20poly1305::{aead::Aead, KeyInit, ChaCha20Poly1305, Nonce};
+            let cipher = ChaCha20Poly1305::new(self.ipc_key.as_ref().into());
+            let nonce = Nonce::from_slice(&encrypted.nonce);
+            let plaintext = cipher.decrypt(nonce, encrypted.data.as_ref())
+                .map_err(|_| cdp_proxy::ProxyError::CredentialInjection(
+                    "failed to decrypt credential from vault".to_string()
+                ))?;
+
+            // 3. Wrap in SecureBuffer and return as Authorization header.
+            let value = cdp_crypto::SecureBuffer::new(plaintext);
+            Ok(vec![cdp_proxy::credential::CredentialHeader {
+                name: "Authorization".to_string(),
+                value,
+            }])
         })
     }
 }

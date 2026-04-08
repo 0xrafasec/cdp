@@ -42,6 +42,9 @@ pub enum GateError {
     #[error("proxy error: {0}")]
     Proxy(#[from] cdp_proxy::ProxyError),
 
+    #[error("vault error: {0}")]
+    Vault(#[from] cdp_vault::VaultError),
+
     #[error("credential request denied: {0}")]
     CredentialDenied(String),
 }
