@@ -266,12 +266,24 @@ impl CommandExecutor {
         // SAFETY: write_fd is a valid open pipe write end.
         let mut write_file = unsafe { std::fs::File::from_raw_fd(write_fd) };
 
-        write_file
-            .write_all(credential.as_ref())
-            .map_err(|e| WrapError::CredentialDelivery(format!("write credential to pipe: {e}")))?;
-        write_file
-            .flush()
-            .map_err(|e| WrapError::CredentialDelivery(format!("flush credential pipe: {e}")))?;
+        match write_file.write_all(credential.as_ref()) {
+            Ok(()) => {
+                write_file.flush().map_err(|e| {
+                    WrapError::CredentialDelivery(format!("flush credential pipe: {e}"))
+                })?;
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => {
+                // The child exited without reading the credential (e.g. it
+                // never invoked the ASKPASS helper).  This is not an error —
+                // the credential simply wasn't needed.
+                debug!("credential pipe broken (child did not read credential)");
+            }
+            Err(e) => {
+                return Err(WrapError::CredentialDelivery(format!(
+                    "write credential to pipe: {e}"
+                )));
+            }
+        }
 
         // Drop closes the write end — the child's read will see EOF.
         drop(write_file);
