@@ -3,4 +3,22 @@ name = "cdp-cli-wrap"
 version.workspace = true
 edition.workspace = true
 
+[[bin]]
+name = "cdp-wrap"
+path = "src/main.rs"
+
 [dependencies]
+cdp-crypto = { workspace = true }
+tokio = { workspace = true }
+nix = { workspace = true }
+zeroize = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+thiserror = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+libc = { workspace = true }
+clap = { version = "4", features = ["derive"] }
+regex = "1"
