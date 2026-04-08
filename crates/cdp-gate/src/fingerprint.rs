@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use base64::Engine;
 use chrono::Utc;
 use ed25519_dalek::SigningKey;
-use rand::Rng;
+use rand::RngExt;
 use serde::Serialize;
 
 use crate::agent_verify::hash_binary;

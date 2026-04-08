@@ -43,6 +43,8 @@ pub const REMOTE_DELEGATION_ALLOWED: bool = false;
 /// Configuration for the mTLS listener.
 #[derive(Debug, Clone)]
 pub struct TlsListenerConfig {
+    /// IP address to bind on. Default: `127.0.0.1`.
+    pub bind_address: String,
     /// TCP port to listen on. Default: 9443.
     pub bind_port: u16,
     /// Path to the PEM-encoded server certificate chain.
@@ -56,13 +58,14 @@ pub struct TlsListenerConfig {
 }
 
 impl TlsListenerConfig {
-    /// Create a config with the default port 9443 and mandatory client cert.
+    /// Create a config with the default port 9443, localhost binding, and mandatory client cert.
     pub fn new(
         server_cert_path: impl Into<PathBuf>,
         server_key_path: impl Into<PathBuf>,
         client_ca_cert_path: impl Into<PathBuf>,
     ) -> Self {
         Self {
+            bind_address: "127.0.0.1".to_string(),
             bind_port: 9443,
             server_cert_path: server_cert_path.into(),
             server_key_path: server_key_path.into(),
@@ -140,7 +143,7 @@ impl TlsListener {
         let acceptor = TlsAcceptor::from(Arc::new(tls_config));
 
         // Bind TCP socket.
-        let addr: SocketAddr = format!("0.0.0.0:{}", config.bind_port)
+        let addr: SocketAddr = format!("{}:{}", config.bind_address, config.bind_port)
             .parse()
             .map_err(|e| GateError::Listener(format!("invalid bind address: {e}")))?;
         let inner = TcpListener::bind(addr).await.map_err(|e| {
@@ -344,6 +347,7 @@ mod tests {
     #[test]
     fn tls_listener_config_defaults() {
         let cfg = TlsListenerConfig::new("cert.pem", "key.pem", "ca.pem");
+        assert_eq!(cfg.bind_address, "127.0.0.1");
         assert_eq!(cfg.bind_port, 9443);
         assert!(cfg.require_client_cert);
         assert_eq!(cfg.server_cert_path, PathBuf::from("cert.pem"));

@@ -19,12 +19,26 @@ use chacha20poly1305::{
     AeadCore, ChaCha20Poly1305, KeyInit,
     aead::{Aead, OsRng},
 };
-use rand::RngCore;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use tracing::warn;
 use zeroize::{Zeroize, Zeroizing};
 
 use crate::{CredentialRef, EncryptedCredential, RotationStream, VaultBackend, VaultError};
+
+// ---------------------------------------------------------------------------
+// Zeroize on drop for FileBackend
+// ---------------------------------------------------------------------------
+
+impl Drop for FileBackend {
+    fn drop(&mut self) {
+        // Zeroize all credential values in memory before deallocation.
+        for cred in self.credentials.values_mut() {
+            cred.value.zeroize();
+            cred.name.zeroize();
+        }
+    }
+}
 
 // ---------------------------------------------------------------------------
 // File format constants

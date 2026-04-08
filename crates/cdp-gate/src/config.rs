@@ -40,6 +40,7 @@ pub struct GateSection {
 #[serde(default)]
 pub struct TlsSection {
     pub enabled: bool,
+    pub bind_address: String,
     pub cert_path: String,
     pub key_path: String,
     pub client_ca_path: String,
@@ -189,6 +190,7 @@ impl Default for TlsSection {
     fn default() -> Self {
         Self {
             enabled: false,
+            bind_address: "127.0.0.1".to_string(),
             cert_path: "~/.config/cdp/gate.crt".to_string(),
             key_path: "~/.config/cdp/gate.key".to_string(),
             client_ca_path: "~/.config/cdp/client-ca.crt".to_string(),

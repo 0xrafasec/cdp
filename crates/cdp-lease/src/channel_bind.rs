@@ -5,7 +5,7 @@
 //! request must present the nonce alongside the lease token so that a stolen
 //! token cannot be replayed from a different channel.
 
-use rand::RngCore as _;
+use rand::Rng as _;
 
 // ---------------------------------------------------------------------------
 // Public API

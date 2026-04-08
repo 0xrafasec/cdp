@@ -1,6 +1,6 @@
 //! HMAC-SHA256 token generation and constant-time verification.
 
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use sha2::Sha256;
 
 type HmacSha256 = Hmac<Sha256>;

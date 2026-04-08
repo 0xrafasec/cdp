@@ -3,7 +3,7 @@
 use std::{collections::HashMap, fmt, net::IpAddr};
 
 use chrono::{DateTime, Utc};
-use rand::RngCore as _;
+use rand::Rng as _;
 use serde::{Deserialize, Serialize};
 
 use cdp_policy::{BodyConstraints, Scope};

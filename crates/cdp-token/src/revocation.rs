@@ -88,12 +88,19 @@ impl RevocationList {
     ///
     /// The task holds a weak reference so it exits automatically when the last
     /// strong [`Arc`] to the list is dropped.
-    pub fn start_cleanup_task(self: Arc<Self>) {
+    pub fn start_cleanup_task(self: &Arc<Self>) {
+        let weak = Arc::downgrade(self);
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(60));
             loop {
                 interval.tick().await;
-                self.cleanup().await;
+                match weak.upgrade() {
+                    Some(strong) => strong.cleanup().await,
+                    None => {
+                        tracing::debug!("RevocationList dropped; cleanup task exiting");
+                        break;
+                    }
+                }
             }
         });
     }

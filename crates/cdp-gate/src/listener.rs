@@ -53,9 +53,9 @@ impl GateListener {
             ))
         })?;
 
-        // Set socket file permissions to 0660.
+        // Set socket file permissions to 0600 (owner-only access).
         use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(socket_path, std::fs::Permissions::from_mode(0o660))
+        std::fs::set_permissions(socket_path, std::fs::Permissions::from_mode(0o600))
             .map_err(|e| GateError::Listener(format!("failed to set socket permissions: {e}")))?;
 
         Ok(Self {
@@ -92,8 +92,15 @@ fn extract_peer_info(stream: &UnixStream) -> Result<PeerInfo, GateError> {
     let creds = getsockopt(&borrowed, PeerCredentials)
         .map_err(|e| GateError::Syscall(format!("getsockopt(SO_PEERCRED) failed: {e}")))?;
 
+    let pid: u32 = creds.pid().try_into().map_err(|_| {
+        GateError::Syscall(format!(
+            "SO_PEERCRED returned negative PID: {}",
+            creds.pid()
+        ))
+    })?;
+
     Ok(PeerInfo {
-        pid: creds.pid() as u32,
+        pid,
         uid: creds.uid(),
         gid: creds.gid(),
     })

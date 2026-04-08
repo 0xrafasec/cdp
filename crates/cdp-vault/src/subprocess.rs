@@ -11,7 +11,7 @@ use std::pin::Pin;
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use nix::sys::socket::{AddressFamily, SockFlag, SockType, socketpair};
-use rand::RngCore;
+use rand::Rng;
 use serde_json::Value;
 use tokio::io::BufReader;
 use tokio::net::UnixStream;
@@ -70,11 +70,13 @@ impl SubprocessManager {
         use std::os::unix::io::IntoRawFd;
 
         // Create a Unix socket pair (parent_fd, child_fd).
+        // Use SOCK_CLOEXEC so both fds are closed on exec by default;
+        // the child fd is explicitly made inheritable before spawn.
         let (parent_fd, child_fd) = socketpair(
             AddressFamily::Unix,
             SockType::Stream,
             None,
-            SockFlag::empty(),
+            SockFlag::SOCK_CLOEXEC,
         )
         .map_err(|e| VaultError::Subprocess(format!("socketpair: {e}")))?;
 
@@ -84,6 +86,13 @@ impl SubprocessManager {
 
         let child_fd_raw = child_fd.into_raw_fd();
         let parent_fd_raw = parent_fd.into_raw_fd();
+
+        // Clear CLOEXEC on the child fd so the child process inherits it.
+        // SAFETY: child_fd_raw is a valid fd we just obtained from socketpair.
+        let flags = unsafe { libc::fcntl(child_fd_raw, libc::F_GETFD) };
+        if flags >= 0 {
+            unsafe { libc::fcntl(child_fd_raw, libc::F_SETFD, flags & !libc::FD_CLOEXEC) };
+        }
 
         // Spawn the child using /proc/self/exe re-exec pattern.
         let child = Command::new("/proc/self/exe")
@@ -112,7 +121,7 @@ impl SubprocessManager {
         let reader = BufReader::new(read_half);
 
         // Encode the key before moving into the struct.
-        let encoded_key = BASE64.encode(ipc_key.as_ref());
+        let mut encoded_key = Zeroizing::new(BASE64.encode(ipc_key.as_ref()));
 
         let manager = SubprocessManager {
             inner: Mutex::new(SubprocessInner {
@@ -123,7 +132,11 @@ impl SubprocessManager {
             }),
             ipc_key,
         };
-        let init_cmd = VaultCommand::Init { key: encoded_key };
+        let init_cmd = VaultCommand::Init {
+            key: encoded_key.to_string(),
+        };
+        // Zeroize the base64-encoded key copy now that the command owns its own copy.
+        zeroize::Zeroize::zeroize(encoded_key.as_mut());
         manager.send_command(init_cmd).await?;
 
         Ok(manager)

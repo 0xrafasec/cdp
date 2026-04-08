@@ -100,8 +100,10 @@ async fn gate_main() -> Result<()> {
 
     // 6. Generate gate key from OS entropy.
     let mut gate_key_bytes = [0u8; 32];
-    rand::RngCore::fill_bytes(&mut rand::rng(), &mut gate_key_bytes);
+    rand::Rng::fill_bytes(&mut rand::rng(), &mut gate_key_bytes);
     let gate_key = zeroize::Zeroizing::new(gate_key_bytes.to_vec());
+    // Copy for the Router (which takes a fixed-size array).
+    let router_gate_key = zeroize::Zeroizing::new(gate_key_bytes);
     // Zeroize the stack copy immediately.
     zeroize::Zeroize::zeroize(&mut gate_key_bytes);
 
@@ -226,6 +228,7 @@ async fn gate_main() -> Result<()> {
     let config = Arc::new(config);
     let router = Arc::new(router::Router::new(
         config.clone(),
+        router_gate_key,
         death_tx,
         Arc::clone(&lease_manager),
         Arc::clone(&proxy_manager),

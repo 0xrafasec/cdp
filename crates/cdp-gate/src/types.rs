@@ -33,7 +33,6 @@ pub struct AgentRegistration {
     pub agent_id: String,
     pub agent_version: String,
     pub capabilities_granted: Vec<String>,
-    pub session_token: String,
     /// Unique per Unix-socket connection; bound into the session HMAC.
     pub connection_id: Vec<u8>,
     pub registered_at: DateTime<Utc>,

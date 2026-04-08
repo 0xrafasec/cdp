@@ -233,7 +233,7 @@ pub fn verify_mtls_attestation(cert_der: &[u8]) -> Result<AttestationResult> {
 /// 6. Check `aud` and `exp`.
 ///
 /// Only RS256 is supported. Requests are made with a 10-second timeout.
-#[instrument(skip(token, config), fields(token_prefix = %token.get(..20).unwrap_or("?")))]
+#[instrument(skip(token, config))]
 pub async fn verify_oidc_attestation(
     token: &str,
     config: &OidcConfig,
@@ -402,8 +402,8 @@ fn find_jwk<'a>(jwks: &'a Jwks, kid: Option<&str>) -> Option<&'a JwkKey> {
 /// Verify an RS256 JWT signature using a JWK.
 fn verify_rs256(header_b64: &str, claims_b64: &str, sig_b64: &str, jwk: &JwkKey) -> Result<()> {
     use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+    use rsa::sha2::Sha256;
     use rsa::{pkcs1v15::VerifyingKey as RsaVerifyingKey, signature::Verifier as RsaVerifier};
-    use sha2::Sha256;
 
     let n_bytes = URL_SAFE_NO_PAD
         .decode(jwk.n.as_deref().unwrap_or(""))

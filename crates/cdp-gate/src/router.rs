@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use chrono::Utc;
 use lru::LruCache;
-use rand::RngCore;
+use rand::Rng;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
 use tokio::net::UnixStream;
 use tokio::sync::{Mutex, RwLock, mpsc};
@@ -34,22 +34,35 @@ pub struct Router {
     policy_engine: Arc<PolicyEngine>,
 }
 
+/// Minimum nonce cache size to prevent replay attacks with undersized caches.
+const MIN_NONCE_CACHE_ENTRIES: usize = 10_000;
+
 impl Router {
-    /// Create a new `Router` with a freshly generated gate key.
+    /// Create a new `Router` using the provided gate key.
+    ///
+    /// The gate key **must** be the same key used by [`LeaseManager`] and
+    /// [`ProxyManager`] so that session and lease tokens are verifiable
+    /// across all components.
     pub fn new(
         config: Arc<GateConfig>,
+        gate_key: Zeroizing<[u8; 32]>,
         death_tx: mpsc::Sender<DeathNotification>,
         lease_manager: Arc<LeaseManager>,
         proxy_manager: Arc<cdp_proxy::ProxyManager>,
         policy_engine: Arc<PolicyEngine>,
     ) -> Self {
-        // Generate random 32-byte gate key.
-        let mut key_bytes = [0u8; 32];
-        rand::rng().fill_bytes(&mut key_bytes);
-        let gate_key = Zeroizing::new(key_bytes);
-
-        let capacity = NonZero::new(config.security.nonce_max_entries.max(1))
-            .expect("nonce_max_entries is non-zero");
+        let effective_entries = config
+            .security
+            .nonce_max_entries
+            .max(MIN_NONCE_CACHE_ENTRIES);
+        if config.security.nonce_max_entries < MIN_NONCE_CACHE_ENTRIES {
+            tracing::warn!(
+                configured = config.security.nonce_max_entries,
+                effective = effective_entries,
+                "nonce_max_entries below minimum ({MIN_NONCE_CACHE_ENTRIES}); using minimum"
+            );
+        }
+        let capacity = NonZero::new(effective_entries).expect("nonce_max_entries is non-zero");
         let nonce_cache = Arc::new(Mutex::new(LruCache::new(capacity)));
 
         Self {
@@ -234,12 +247,12 @@ impl Router {
         // Capabilities: echo back what was requested (policy engine comes later).
         let capabilities_granted = params.capabilities.clone();
 
-        // Store registration.
+        // Store registration (session token is not stored — it is recomputed
+        // from the gate key + fingerprint + connection_id on every validation).
         let registration = AgentRegistration {
             agent_id: params.agent_id.clone(),
             agent_version: params.agent_version.clone(),
             capabilities_granted: capabilities_granted.clone(),
-            session_token: session_token.clone(),
             connection_id: connection_id.to_vec(),
             registered_at: Utc::now(),
             fingerprint,
@@ -615,7 +628,16 @@ mod tests {
         let policy_engine =
             Arc::new(PolicyEngine::new(policy_dir, approval_config).expect("PolicyEngine::new"));
 
-        Router::new(config, tx, lease_manager, proxy_manager, policy_engine)
+        let gate_key_arr = Zeroizing::new([0u8; 32]);
+
+        Router::new(
+            config,
+            gate_key_arr,
+            tx,
+            lease_manager,
+            proxy_manager,
+            policy_engine,
+        )
     }
 
     // -----------------------------------------------------------------------

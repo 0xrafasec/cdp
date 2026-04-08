@@ -115,34 +115,36 @@ pub async fn resolve_tcp_peer(remote_addr: SocketAddr) -> Result<(u32, u32), Pro
 ///
 /// `remote_addr` is the peer address as the proxy sees it — i.e. the agent's
 /// local IP:ephemeral-port.  In `/proc/net/tcp`, that entry appears as the
-/// `local_address` column.
+/// `local_address` column. Reads `/proc/net/tcp` for IPv4 addresses and
+/// `/proc/net/tcp6` for IPv6.
 pub fn find_socket_inode(remote_addr: SocketAddr) -> Result<u64, ProxyError> {
-    let content = std::fs::read_to_string("/proc/net/tcp")
-        .map_err(|e| ProxyError::AuthFailed(format!("cannot read /proc/net/tcp: {e}")))?;
+    let proc_path = match remote_addr.ip() {
+        std::net::IpAddr::V4(_) => "/proc/net/tcp",
+        std::net::IpAddr::V6(_) => "/proc/net/tcp6",
+    };
+    let content = std::fs::read_to_string(proc_path)
+        .map_err(|e| ProxyError::AuthFailed(format!("cannot read {proc_path}: {e}")))?;
     parse_proc_net_tcp(&content, remote_addr)
 }
 
-/// Parse the contents of `/proc/net/tcp` and return the inode for the entry
-/// whose `local_address` column matches `target_addr`.
+/// Parse the contents of `/proc/net/tcp` (or `/proc/net/tcp6`) and return the
+/// inode for the entry whose `local_address` column matches `target_addr`.
 ///
 /// This function is public so that it can be tested with synthetic content
 /// without requiring real network connections.
 pub fn parse_proc_net_tcp(content: &str, target_addr: SocketAddr) -> Result<u64, ProxyError> {
-    // Only IPv4 is handled here. IPv6 would use /proc/net/tcp6.
-    let target_ip = match target_addr.ip() {
-        std::net::IpAddr::V4(v4) => v4,
-        std::net::IpAddr::V6(_) => {
-            return Err(ProxyError::AuthFailed(
-                "IPv6 peer resolution not yet supported".to_string(),
-            ));
+    let target_local = match target_addr.ip() {
+        std::net::IpAddr::V4(v4) => {
+            let ip_hex = ipv4_to_proc_hex(v4);
+            let port_hex = format!("{:04X}", target_addr.port());
+            format!("{ip_hex}:{port_hex}")
+        }
+        std::net::IpAddr::V6(v6) => {
+            let ip_hex = ipv6_to_proc_hex(v6);
+            let port_hex = format!("{:04X}", target_addr.port());
+            format!("{ip_hex}:{port_hex}")
         }
     };
-    let target_port = target_addr.port();
-
-    // Encode as the hex format used by /proc/net/tcp.
-    let ip_hex = ipv4_to_proc_hex(target_ip);
-    let port_hex = format!("{target_port:04X}");
-    let target_local = format!("{ip_hex}:{port_hex}");
 
     for line in content.lines().skip(1) {
         // Columns: sl local_address rem_address st tx_queue rx_queue tr ... uid ... inode
@@ -273,6 +275,24 @@ fn ipv4_to_proc_hex(ip: std::net::Ipv4Addr) -> String {
     format!("{le_u32:08X}")
 }
 
+/// Encode an IPv6 address as the 32-character uppercase hex string used in
+/// `/proc/net/tcp6`.
+///
+/// The kernel stores IPv6 addresses as four 32-bit words in host byte order.
+/// On little-endian x86, each 4-byte group is byte-reversed compared to
+/// network order.
+fn ipv6_to_proc_hex(ip: std::net::Ipv6Addr) -> String {
+    let octets = ip.octets(); // 16 bytes in network order
+    let mut result = String::with_capacity(32);
+    // Process in 4-byte groups, byte-reversing each group for little-endian.
+    for chunk in octets.chunks(4) {
+        let word = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+        use std::fmt::Write;
+        let _ = write!(result, "{word:08X}");
+    }
+    result
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -334,11 +354,32 @@ mod tests {
         assert_eq!(inode, 67890);
     }
 
+    // --- IPv6 support ---
+
+    // Sample /proc/net/tcp6 content. ::1 in proc format is
+    // 00000000000000000000000001000000 (four 32-bit LE words).
+    const SAMPLE_TCP6: &str = "  sl  local_address                         remote_address                        st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n\
+                               0: 00000000000000000000000001000000:1F90 00000000000000000000000000000000:0000 0A 00000000:00000000 00:00000000 00000000  1000        0 55555 1 0000000000000000 100 0 0 10 0\n";
+
     #[test]
-    fn test_parse_proc_net_tcp_ipv6_fails() {
+    fn test_parse_proc_net_tcp6_loopback() {
         let addr: SocketAddr = "[::1]:8080".parse().expect("valid addr");
-        let err = parse_proc_net_tcp(SAMPLE_TCP, addr).expect_err("IPv6 should fail");
+        let inode = parse_proc_net_tcp(SAMPLE_TCP6, addr).expect("should find IPv6 entry");
+        assert_eq!(inode, 55555);
+    }
+
+    #[test]
+    fn test_parse_proc_net_tcp6_no_match_in_v4_data() {
+        // IPv6 address should not match IPv4 /proc/net/tcp data.
+        let addr: SocketAddr = "[::1]:8080".parse().expect("valid addr");
+        let err = parse_proc_net_tcp(SAMPLE_TCP, addr).expect_err("IPv6 in v4 data should fail");
         assert!(matches!(err, ProxyError::AuthFailed(_)));
+    }
+
+    #[test]
+    fn test_ipv6_to_proc_hex_loopback() {
+        let ip: std::net::Ipv6Addr = "::1".parse().expect("valid");
+        assert_eq!(ipv6_to_proc_hex(ip), "00000000000000000000000001000000");
     }
 
     // --- hex_to_bytes ---
