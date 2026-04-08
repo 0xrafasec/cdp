@@ -5,6 +5,7 @@ edition.workspace = true
 
 [dependencies]
 cdp-crypto = { workspace = true }
+cdp-token = { workspace = true }
 cdp-proxy = { workspace = true }
 cdp-policy = { workspace = true }
 cdp-lease = { workspace = true }
@@ -29,6 +30,9 @@ chrono = { workspace = true }
 lru = { workspace = true }
 libc = { workspace = true }
 zeroize = { workspace = true }
+rustls = { version = "0.23", features = ["std"] }
+tokio-rustls = "0.26"
+rustls-pemfile = "2"
 
 [dev-dependencies]
 tempfile = "3"

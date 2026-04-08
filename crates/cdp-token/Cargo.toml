@@ -4,3 +4,21 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+cdp-crypto = { workspace = true }
+ed25519-dalek = { workspace = true }
+base64 = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+zeroize = { workspace = true }
+sha2 = { workspace = true }
+rand = { workspace = true }
+tokio = { workspace = true }
+x509-cert = "0.2"
+der = { version = "0.7", features = ["std"] }
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+rsa = { version = "0.9", features = ["sha2"] }
+getrandom = { version = "0.2", features = ["std"] }
