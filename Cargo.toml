@@ -12,6 +12,7 @@ members = [
     "crates/cdp-token",
     "crates/cdp-audit",
     "crates/cdp-sdk",
+    "crates/cdp-integration-tests",
 ]
 
 [workspace.package]
