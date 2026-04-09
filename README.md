@@ -1,5 +1,6 @@
 <p align="center">
   <h1 align="center">CDP — Credential Delegation Protocol</h1>
+  <p align="center"><strong>Status:</strong> Work in progress</p>
   <p align="center">
     An open protocol and reference implementation for <strong>secure credential delegation to AI agents</strong>.
     <br />
