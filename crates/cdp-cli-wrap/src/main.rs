@@ -154,8 +154,8 @@ fn run_wrap() -> Result<i32, WrapError> {
     let mut gate = GateClient::connect(&fingerprint.socket_path)?;
     gate.register()?;
 
-    // Request the credential.
-    let credential = gate.request_credential(&wrap_args.credential_ref, &wrap_args.command)?;
+    // Request a credential lease (returns proxy info, not the credential itself).
+    let lease = gate.request_credential(&wrap_args.credential_ref, &wrap_args.command)?;
 
     // Determine the path to this binary (used as ASKPASS helper).
     let self_path = std::env::current_exe()
@@ -166,9 +166,9 @@ fn run_wrap() -> Result<i32, WrapError> {
                 .unwrap_or_else(|| "cdp-wrap".to_string())
         });
 
-    // Execute the command with credential injection.
+    // Execute the command with credential injection via the CDP proxy.
     let executor = CommandExecutor::new(self_path)?;
-    let result = executor.run(&wrap_args.command, &wrap_args.args, &method, credential)?;
+    let result = executor.run(&wrap_args.command, &wrap_args.args, &method, lease)?;
 
     Ok(result.exit_code)
 }

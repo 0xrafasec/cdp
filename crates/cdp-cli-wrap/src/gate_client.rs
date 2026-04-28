@@ -13,15 +13,32 @@ use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use cdp_crypto::SecureBuffer;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tracing::{debug, instrument};
 use uuid::Uuid;
-use zeroize::Zeroizing;
 
 use crate::WrapError;
+
+// ---------------------------------------------------------------------------
+// Lease info returned by the Gate
+// ---------------------------------------------------------------------------
+
+/// Information about a granted credential lease, returned by the Gate's
+/// `cdp.requestCredential` RPC. The credential itself is never returned —
+/// it is injected by the CDP proxy at the transport layer.
+#[derive(Debug)]
+pub struct LeaseInfo {
+    /// The proxy port to route traffic through.
+    pub proxy_port: u16,
+    /// HMAC lease token for authenticating with the proxy.
+    pub lease_token: String,
+    /// Hex-encoded channel-binding nonce.
+    pub channel_binding_nonce: String,
+    /// Granted lease TTL in seconds.
+    pub ttl_seconds: u64,
+}
 
 // ---------------------------------------------------------------------------
 // Fingerprint file types
@@ -180,15 +197,18 @@ impl GateClient {
         Ok(())
     }
 
-    /// Request a credential by ref and return it as a [`SecureBuffer`].
+    /// Request a credential lease and return proxy connection info.
     ///
-    /// The `command` parameter is used to build a human-readable reason string.
+    /// The credential itself is never returned to the caller — it is injected
+    /// by the CDP proxy at the transport layer. The returned [`LeaseInfo`]
+    /// contains the proxy port and authentication tokens needed to route
+    /// traffic through the proxy.
     #[instrument(skip_all, fields(credential_ref = %credential_ref))]
     pub fn request_credential(
         &mut self,
         credential_ref: &str,
         command: &str,
-    ) -> Result<SecureBuffer, WrapError> {
+    ) -> Result<LeaseInfo, WrapError> {
         let session_token = self.session_token.clone().ok_or_else(|| {
             WrapError::Gate("must call register() before request_credential()".to_string())
         })?;
@@ -214,19 +234,29 @@ impl GateClient {
 
         let response = self.send_request(&request)?;
 
-        // The Gate returns the credential value in the `credential` field.
-        // It must be zeroized immediately after copying into a SecureBuffer.
-        let raw_str = response["credential"].as_str().ok_or_else(|| {
-            WrapError::Gate("requestCredential: missing credential field".to_string())
-        })?;
+        let proxy_port = response["proxy_port"]
+            .as_u64()
+            .ok_or_else(|| WrapError::Gate("missing proxy_port in response".to_string()))?
+            as u16;
+        let lease_token = response["lease_token"]
+            .as_str()
+            .ok_or_else(|| WrapError::Gate("missing lease_token in response".to_string()))?
+            .to_string();
+        let channel_binding_nonce = response["channel_binding_nonce"]
+            .as_str()
+            .ok_or_else(|| {
+                WrapError::Gate("missing channel_binding_nonce in response".to_string())
+            })?
+            .to_string();
+        let ttl_seconds = response["ttl_seconds"].as_u64().unwrap_or(3600);
 
-        let mut raw = Zeroizing::new(raw_str.as_bytes().to_vec());
-        let buf = SecureBuffer::new(raw.to_vec());
-        // Zeroize the intermediate copy immediately.
-        raw.iter_mut().for_each(|b| *b = 0);
-
-        debug!("received credential from Gate");
-        Ok(buf)
+        debug!(proxy_port, ttl_seconds, "credential lease granted");
+        Ok(LeaseInfo {
+            proxy_port,
+            lease_token,
+            channel_binding_nonce,
+            ttl_seconds,
+        })
     }
 
     // -----------------------------------------------------------------------
